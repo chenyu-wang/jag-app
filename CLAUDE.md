@@ -112,8 +112,11 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.25.0 | Performance: fix _rosterColMap() double-call in all three data functions; skip loadData() after stable saves (no sort needed) | n/a |
 | v1.26.0 | Data structure: combined events (Youth Hour, Combined, Special, Cancelled, Replaced) now saved as single row with Group="Both" instead of two JAG1+JAG2 rows | `migrateRosterToGroupBoth()` |
 | v1.27.0 | Fix `getEligible('organiser', null, true)` for combined form; make load failure errors prominent with retry button | n/a |
+| v1.28.0 | Code review: remove dead migration fns, extract `_esc()` helper, fix XSS in card/form innerHTML, add date/time format validation in `submitForm` | n/a |
+| v1.28.1 | Performance: cache `entriesByDate` Map in `_entriesByDateCache`; fix duplicate `entries.find()` calls in `buildEventCard` | n/a |
+| v1.29.0 | Attendee selection panel in Add/Edit form; in-memory `attendanceCache`; `+ 👥` share buttons filtered to selected attendees | n/a |
 
-### Current schema (v1.27.0, 13 columns — Roster tab)
+### Current schema (v1.29.0, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
 > **Row structure**: Separated LG → 2 rows (JAG1 + JAG2). All other event types → 1 row (Group="Both").
 | Col | Sheet Header | JS field | Notes |
@@ -206,6 +209,9 @@ Run `formatSheets()` from the Apps Script editor any time to apply human-readabl
 - After save/delete: call `finishSave(msg, skipRefresh)` — sets `currentView='home'`, calls `setActiveNav('home')`, then `loadData()` unless `skipRefresh=true`
 - `submitForm` has 4 explicit paths: Cancelled/Replaced → "Both" entry; Special → "Both" entry; Combined → "Both" entry; Separated LG → per-group entries
 - `buildEventCard` combined section: `entries.find(e => e.group === 'Both') || entries.find(e => e.group === 'JAG1')` — handles both new and legacy formats
+- **Attendance cache**: `attendanceCache` keyed by `'YYYY-MM-DD'` (combined) or `'YYYY-MM-DD:JAG1'`/`'YYYY-MM-DD:JAG2'` (separated). Populated by `saveAttendanceFromForm(date, eventType)` on form submit. Session-only — no sheet persistence
+- `buildAttendeePanel(date, eventType)` — collapsible `<details>` panel appended to `form-sections` by `rebuildSections()`. Not shown for Cancelled/Replaced/Special. Uses `createElement`/`createTextNode` (no innerHTML for member data)
+- `getActiveForShare(dateISO, group?)` — returns attendance-filtered member list for `+ 👥` share buttons. Falls back to all active if no cache entry. Only affects `shareCombinedWithNames` and `shareGroupWithNames` — basic Share/Share All buttons are unaffected
 - Nav updates: use `setActiveNav(view)` — do not inline the `['home','add','members'].forEach(...)` pattern
 - Card footers: use `buildCardFooter(friday, entries, ts)` — do not duplicate the Share/Edit button HTML
 - Encoding entries for `onclick`: use `encodeEntries(obj)` — replaces `JSON.stringify(obj).split('"').join('&quot;')`
