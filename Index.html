@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.29.0 (2026-04-21) -->
+  <!-- Version: 1.29.1 (2026-04-21) -->
   <title>JAG LG Roster</title>
   <style>
     /* ---- Reset & Base ---- */
@@ -121,11 +121,14 @@
     .add-member-btn:hover { border-color: #6366f1; }
 
     /* ---- Attendee Panel ---- */
-    .attendee-panel { border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 16px; background: #f8fafc; overflow: hidden; }
+    .attendee-panel { border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 16px; margin-bottom: 4px; background: #f8fafc; overflow: hidden; }
     .attendee-panel > summary { font-size: .85rem; font-weight: 600; color: #475569; cursor: pointer; user-select: none; list-style: none; display: flex; align-items: center; gap: 6px; padding: 10px 12px; }
     .attendee-panel > summary::-webkit-details-marker { display: none; }
+    .attendee-panel > summary::after { content: '▾'; margin-left: auto; font-size: .8rem; transition: transform .2s; }
     .attendee-panel[open] > summary { border-bottom: 1px solid #e2e8f0; }
+    .attendee-panel[open] > summary::after { transform: rotate(-180deg); }
     .attendee-panel-body { padding: 8px 12px 12px; }
+    #att-count { background: #e0e7ff; color: #4338ca; border-radius: 999px; padding: 1px 8px; font-size: .75rem; font-weight: 600; }
     .att-group-label { font-size: .73rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748b; margin: 10px 0 6px; }
     .att-row { display: flex; flex-wrap: wrap; gap: 5px 12px; }
     .att-row label { display: flex; align-items: center; gap: 5px; font-size: .84rem; color: #1e293b; cursor: pointer; font-weight: 400; margin-bottom: 0; }
@@ -697,9 +700,11 @@ function renderAdd(prefillDate) {
 
       <div id="form-sections"></div>
 
-      <button class="btn btn-primary" onclick="submitForm()">${isEdit ? 'Save Changes' : 'Save to Roster'}</button>
-      ${deleteBtn}
-      <button class="btn btn-secondary" onclick="editingEntries=[];showView('home')">Cancel</button>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+        <button class="btn btn-primary" onclick="submitForm()">Save & Copy</button>
+        ${deleteBtn}
+        <button class="btn btn-secondary" onclick="editingEntries=[];showView('home')">Cancel</button>
+      </div>
     </div>
   `;
   c.appendChild(wrap);
@@ -908,7 +913,9 @@ function addSpecialField(label, value, container) {
 
 function buildSelect(id, options, selectedValue) {
   const listId = 'ddl-' + id;
-  const inputVal = selectedValue ? displayName(selectedValue) : '';
+  const inputVal = selectedValue
+    ? (allMembers.some(m => m.name === selectedValue) ? displayName(selectedValue) : selectedValue)
+    : '';
   const opts = options.map(n => {
     const dn = displayName(n);
     return `<div class="dd-opt" onmousedown="event.preventDefault();ddPick('${id}','${listId}',${encodeEntries(dn)})">${_esc(dn)}</div>`;
@@ -1036,7 +1043,10 @@ function submitForm() {
         if (!result.success) { showToast('Error: ' + result.error); return; }
         if (orphanRowIndex) google.script.run.deleteRosterEntry(orphanRowIndex);
         _mergeEntriesIntoCache(toSave);
-        finishSave('Saved!', result.stable);
+        const _friday = new Date(date + 'T00:00:00');
+        const _txt = _buildCombinedShareText(_friday, toSave);
+        _copyTextSilent(_txt);
+        finishSave('Saved & copied!', result.stable);
       })
       .withFailureHandler(err => showToast('Error: ' + err.message))
       .saveRosterEntries(toSave);
@@ -1067,7 +1077,9 @@ function submitForm() {
     .withSuccessHandler(function(result) {
       if (!result.success) { showToast('Error: ' + result.error); return; }
       _mergeEntriesIntoCache(toSave);
-      finishSave('Saved!', result.stable);
+      const _friday = new Date(date + 'T00:00:00');
+      _copyTextSilent(_buildGroupShareText(_friday, toSave[0]));
+      finishSave('Saved & copied!', result.stable);
     })
     .withFailureHandler(err => showToast('Error: ' + err.message))
     .saveRosterEntries(toSave);
@@ -1734,7 +1746,7 @@ function shareEvent(friday, entries) {
   }
 }
 
-function shareCombinedWithNames(friday, entries) {
+function _buildCombinedShareText(friday, entries) {
   const entriesArr = Array.isArray(entries) ? entries : [entries];
   const entry      = entriesArr.find(e => e.group === 'Both') || entriesArr.find(e => e.group === 'JAG1') || entriesArr[0];
   const eventType  = entry.eventType || '';
@@ -1838,7 +1850,11 @@ function shareCombinedWithNames(friday, entries) {
     }
   }
 
-  const text = lines.join('\n');
+  return lines.join('\n');
+}
+
+function shareCombinedWithNames(friday, entries) {
+  const text = _buildCombinedShareText(friday, entries);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard!')).catch(() => _fallbackCopy(text));
   } else {
@@ -1846,7 +1862,7 @@ function shareCombinedWithNames(friday, entries) {
   }
 }
 
-function shareGroupWithNames(friday, entryOrArr) {
+function _buildGroupShareText(friday, entryOrArr) {
   const entry = Array.isArray(entryOrArr) ? entryOrArr[0] : entryOrArr;
   const grp   = entry.group;
 
@@ -1919,11 +1935,33 @@ function shareGroupWithNames(friday, entryOrArr) {
     }
   }
 
-  const text = lines.join('\n');
+  return lines.join('\n');
+}
+
+function shareGroupWithNames(friday, entryOrArr) {
+  const text = _buildGroupShareText(friday, entryOrArr);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard!')).catch(() => _fallbackCopy(text));
   } else {
     _fallbackCopy(text);
+  }
+}
+
+function _copyTextSilent(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch(e) {}
+      document.body.removeChild(ta);
+    });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
   }
 }
 

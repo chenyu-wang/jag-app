@@ -115,8 +115,9 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.28.0 | Code review: remove dead migration fns, extract `_esc()` helper, fix XSS in card/form innerHTML, add date/time format validation in `submitForm` | n/a |
 | v1.28.1 | Performance: cache `entriesByDate` Map in `_entriesByDateCache`; fix duplicate `entries.find()` calls in `buildEventCard` | n/a |
 | v1.29.0 | Attendee selection panel in Add/Edit form; in-memory `attendanceCache`; `+ 👥` share buttons filtered to selected attendees | n/a |
+| v1.29.1 | Save & Copy: auto-copy share text to clipboard on save (paths 3/4); extract `_buildCombinedShareText`/`_buildGroupShareText`; add `_copyTextSilent`; fix `buildSelect` free-text multi-person values; attendee panel polish (chevron, pill badge, separator above action buttons) | n/a |
 
-### Current schema (v1.29.0, 13 columns — Roster tab)
+### Current schema (v1.29.1, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
 > **Row structure**: Separated LG → 2 rows (JAG1 + JAG2). All other event types → 1 row (Group="Both").
 | Col | Sheet Header | JS field | Notes |
@@ -212,6 +213,9 @@ Run `formatSheets()` from the Apps Script editor any time to apply human-readabl
 - **Attendance cache**: `attendanceCache` keyed by `'YYYY-MM-DD'` (combined) or `'YYYY-MM-DD:JAG1'`/`'YYYY-MM-DD:JAG2'` (separated). Populated by `saveAttendanceFromForm(date, eventType)` on form submit. Session-only — no sheet persistence
 - `buildAttendeePanel(date, eventType)` — collapsible `<details>` panel appended to `form-sections` by `rebuildSections()`. Not shown for Cancelled/Replaced/Special. Uses `createElement`/`createTextNode` (no innerHTML for member data)
 - `getActiveForShare(dateISO, group?)` — returns attendance-filtered member list for `+ 👥` share buttons. Falls back to all active if no cache entry. Only affects `shareCombinedWithNames` and `shareGroupWithNames` — basic Share/Share All buttons are unaffected
+- `_buildCombinedShareText(friday, entries)` — pure text builder for combined/Youth Hour share message; used by `shareCombinedWithNames` and auto-copy in `submitForm` path 3
+- `_buildGroupShareText(friday, entryOrArr)` — pure text builder for per-group (JAG1/JAG2) share message; used by `shareGroupWithNames` and auto-copy in `submitForm` path 4
+- `_copyTextSilent(text)` — clipboard write with no toast (used by Save & Copy auto-copy; the `finishSave` toast covers user feedback)
 - Nav updates: use `setActiveNav(view)` — do not inline the `['home','add','members'].forEach(...)` pattern
 - Card footers: use `buildCardFooter(friday, entries, ts)` — do not duplicate the Share/Edit button HTML
 - Encoding entries for `onclick`: use `encodeEntries(obj)` — replaces `JSON.stringify(obj).split('"').join('&quot;')`
