@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.29.1 (2026-04-21) -->
+  <!-- Version: 1.29.2 (2026-04-23) -->
   <title>JAG LG Roster</title>
   <style>
     /* ---- Reset & Base ---- */
@@ -368,6 +368,7 @@ function _getDupFirstNames() {
 }
 function displayName(fullName) {
   if (!fullName || fullName === '') return 'TBC';
+  if (!allMembers.some(m => m.name === fullName)) return fullName;
   const first = fullName.split(' ')[0];
   return _getDupFirstNames().has(first) ? fullName : first;
 }
@@ -913,9 +914,7 @@ function addSpecialField(label, value, container) {
 
 function buildSelect(id, options, selectedValue) {
   const listId = 'ddl-' + id;
-  const inputVal = selectedValue
-    ? (allMembers.some(m => m.name === selectedValue) ? displayName(selectedValue) : selectedValue)
-    : '';
+  const inputVal = selectedValue ? displayName(selectedValue) : '';
   const opts = options.map(n => {
     const dn = displayName(n);
     return `<div class="dd-opt" onmousedown="event.preventDefault();ddPick('${id}','${listId}',${encodeEntries(dn)})">${_esc(dn)}</div>`;
