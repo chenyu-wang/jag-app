@@ -116,8 +116,9 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.28.1 | Performance: cache `entriesByDate` Map in `_entriesByDateCache`; fix duplicate `entries.find()` calls in `buildEventCard` | n/a |
 | v1.29.0 | Attendee selection panel in Add/Edit form; in-memory `attendanceCache`; `+ 👥` share buttons filtered to selected attendees | n/a |
 | v1.29.1 | Save & Copy: auto-copy share text to clipboard on save (paths 3/4); extract `_buildCombinedShareText`/`_buildGroupShareText`; add `_copyTextSilent`; fix `buildSelect` free-text multi-person values; attendee panel polish (chevron, pill badge, separator above action buttons) | n/a |
+| v1.29.2 | Fix `displayName()` to return free-text values as-is (unknown members); fixes card display, share copy, and form edit for multi-person free-text like "Jemima & Eva" | n/a |
 
-### Current schema (v1.29.1, 13 columns — Roster tab)
+### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
 > **Row structure**: Separated LG → 2 rows (JAG1 + JAG2). All other event types → 1 row (Group="Both").
 | Col | Sheet Header | JS field | Notes |
