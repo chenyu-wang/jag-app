@@ -124,6 +124,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.30.5 | Nav: merge Home+Add into "Schedule" tab (calendar icon); Lyrics moves to 2nd tab, Members to 3rd; floating action button (FAB) replaces Add tab — shows on Schedule view only; `_updateFab()` toggles visibility; `setActiveNav` maps 'add'→'home' | n/a |
 | v1.30.6 | Bug fix: `generateShareText` now reads "Both"-group entries (Special share was showing all TBC since v1.26); Special branch shows only set fields + custom notes; combined branch uses single-entry lookup. Extract `_clipboardFallback()`; add `_activeCache` for `getActive()` | n/a |
 | v1.30.7 | Rename site to "JAG Life Group Portal" (browser tab title, header h1, Apps Script window title) | n/a |
+| v1.30.8 | FAB unified across all views: shows on Schedule (add event), Lyrics (add song), Members (add member); `fabAction()` dispatcher; inline add buttons removed from Members and Lyrics views | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
@@ -237,7 +238,8 @@ Run `formatSheets()` from the Apps Script editor any time to apply human-readabl
 - `_copyTextSilent(text)` — clipboard write with no toast (used by Save & Copy auto-copy; the `finishSave` toast covers user feedback)
 - Nav tabs: Schedule (home) | Lyrics | Members — 3 tabs only; "Add" is replaced by FAB (`#fab-add`)
 - `setActiveNav(view)` maps 'add'→'home' internally; iterates `['home','members','lyrics']` — do not inline this pattern
-- `_updateFab()` — shows/hides `#fab-add` based on `currentView === 'home'`; call it everywhere `currentView` changes: `showView`, `openEditEntries`, `openAddForDate`, `finishSave`, `renderView`
+- `_updateFab()` — shows/hides `#fab-add` and sets its title; visible on `home`, `members`, `lyrics` views; call it everywhere `currentView` changes: `showView`, `openEditEntries`, `openAddForDate`, `finishSave`, `renderView`
+- `fabAction()` — FAB click dispatcher: `home` → `showView('add')`, `members` → `openMemberForm(null)`, `lyrics` → `openLyricForm(null)`
 - Card footers: use `buildCardFooter(friday, entries, ts)` — do not duplicate the Share/Edit button HTML
 - Encoding entries for `onclick`: use `encodeEntries(obj)` — replaces `JSON.stringify(obj).split('"').join('&quot;')`
 

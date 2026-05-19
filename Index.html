@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.30.7 (2026-05-19) -->
+  <!-- Version: 1.30.8 (2026-05-19) -->
   <title>JAG Life Group Portal</title>
   <style>
     /* ---- Reset & Base ---- */
@@ -205,7 +205,7 @@
       Members
     </button>
   </nav>
-  <button class="fab hidden" id="fab-add" onclick="showView('add')" title="Add event">+</button>
+  <button class="fab hidden" id="fab-add" onclick="fabAction()" title="Add event">+</button>
 </div>
 
 <div id="modal-overlay" onclick="closeModal(event)">
@@ -324,7 +324,17 @@ function setActiveNav(view) {
 }
 
 function _updateFab() {
-  document.getElementById('fab-add').classList.toggle('hidden', currentView !== 'home');
+  const fab = document.getElementById('fab-add');
+  const titles = { home: 'Add event', members: 'Add member', lyrics: 'Add song' };
+  const show = currentView in titles;
+  fab.classList.toggle('hidden', !show);
+  if (show) fab.title = titles[currentView];
+}
+
+function fabAction() {
+  if      (currentView === 'home')    showView('add');
+  else if (currentView === 'members') openMemberForm(null);
+  else if (currentView === 'lyrics')  openLyricForm(null);
 }
 
 function _mergeEntriesIntoCache(savedEntries) {
@@ -1203,12 +1213,6 @@ function renderMembers() {
     inactive.forEach(m => c.appendChild(buildMemberCard(m)));
   }
 
-  const addBtn = document.createElement('button');
-  addBtn.className = 'add-member-btn';
-  addBtn.textContent = '+ Add New Member';
-  addBtn.style.marginTop = '12px';
-  addBtn.onclick = () => openMemberForm(null);
-  c.appendChild(addBtn);
 }
 
 function buildMemberCard(m) {
@@ -2050,12 +2054,6 @@ function _renderLyricsContent() {
   const listEl = document.createElement('div');
   listEl.id = 'lyrics-list';
   c.appendChild(listEl);
-
-  const addBtn = document.createElement('button');
-  addBtn.className = 'add-lyric-btn';
-  addBtn.textContent = '+ Add Song';
-  addBtn.onclick = function() { openLyricForm(null); };
-  c.appendChild(addBtn);
 
   _renderLyricsList('');
 }
