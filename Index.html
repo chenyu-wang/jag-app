@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.30.5 (2026-05-19) -->
+  <!-- Version: 1.30.6 (2026-05-19) -->
   <title>JAG LG Roster</title>
   <style>
     /* ---- Reset & Base ---- */
@@ -236,6 +236,7 @@ let _dashBusy  = false;
 let _scheduleDatesCache  = null;  // D: invalidated whenever allEntries changes
 let _entriesByDateCache  = null;  // invalidated whenever allEntries changes
 let _dupFirstNamesCache  = null;  // F: invalidated whenever allMembers changes
+let _activeCache         = null;  // invalidated whenever allMembers changes
 let _loadGen = 0;               // incremented on each loadData() call; stale responses are discarded
 let attendanceCache = {};        // keyed by 'YYYY-MM-DD' (combined) or 'YYYY-MM-DD:GROUP' (separated); value: Set<memberName>
 
@@ -284,6 +285,7 @@ function loadData() {
       _scheduleDatesCache = null;  // D: invalidate on fresh data
       _entriesByDateCache = null;
       _dupFirstNamesCache = null;  // F: invalidate on fresh data
+      _activeCache = null;
       const loadingEl = document.getElementById('loading-msg');
       if (loadingEl) loadingEl.remove();
       if (data.version) {
@@ -1332,6 +1334,7 @@ function submitMember() {
         allMembers.push(member);
       }
       _dupFirstNamesCache = null;
+      _activeCache = null;
       currentView = 'members';
       renderMembers();
       if (isNew) loadData(); // only new members need server rowIndex sync
@@ -1354,6 +1357,7 @@ function deleteMemberRow(rowIndex) {
       // Optimistic cache update so members view reflects deletion immediately
       allMembers = allMembers.filter(function(m) { return m.rowIndex !== rowIndex; });
       _dupFirstNamesCache = null;
+      _activeCache = null;
       currentView = 'members';
       renderMembers();
       loadData(); // refresh in background to sync rowIndices
@@ -1382,7 +1386,9 @@ function updateRoleToggles() {
 }
 
 function getActive() {
-  return allMembers.filter(m => m.active && !_isNoRoleType(m.roleType));
+  if (_activeCache) return _activeCache;
+  _activeCache = allMembers.filter(m => m.active && !_isNoRoleType(m.roleType));
+  return _activeCache;
 }
 
 function groupMatch(member, group) {
@@ -1726,28 +1732,24 @@ function generateShareText(friday, entries) {
     return lines.join('\n');
   }
 
-  if (combined) {
-    const jag1 = entries.find(e => e.group === 'JAG1') || {};
-    const jag2 = entries.find(e => e.group === 'JAG2') || {};
-    lines.push('🏡 Venue: ' + (jag1.venue || jag2.venue || 'TBC'));
-    if (jag1.organiser || jag2.organiser) {
-      const parts = [];
-      if (jag1.organiser) parts.push('JAG1 ' + displayName(jag1.organiser));
-      if (jag2.organiser) parts.push('JAG2 ' + displayName(jag2.organiser));
-      lines.push('🎙️ Organiser: ' + parts.join(' · '));
-    }
-    const pw  = jag1.pw  || jag2.pw;
-    lines.push('🎵 Praise & Worship: ' + (pw  ? displayName(pw)  : 'TBC'));
-    const fac = jag1.facilitator || jag2.facilitator;
-    lines.push('📖 Facilitator: '      + (fac ? displayName(fac) : 'TBC'));
-    const food = jag1.food || jag2.food;
-    lines.push('🥘 Food: '             + (food || 'TBC'));
-    const rep = jag1.reporting || jag2.reporting;
-    lines.push('✍️ Reporting: '        + (rep ? displayName(rep) : 'TBC'));
-    const iceBreaker = jag1.iceBreaker || jag2.iceBreaker;
-    if (iceBreaker) lines.push('🧊 Ice Breaker: ' + displayName(iceBreaker));
-    const notes = [jag1.notes, jag2.notes].filter(Boolean).join(' · ');
-    if (notes) lines.push('📝 ' + notes);
+  if (eventType === 'Special') {
+    const entry = entries.find(function(e) { return e.group === 'Both'; }) || entries[0] || {};
+    if (entry.venue) lines.push('🏡 Venue: ' + entry.venue);
+    (entry.notes || '').split('\n').filter(Boolean).forEach(function(line) {
+      const ci = line.indexOf(':');
+      lines.push(ci > 0 ? line.slice(0, ci).trim() + ': ' + line.slice(ci + 1).trim() : line.trim());
+    });
+  } else if (combined) {
+    const entry = entries.find(function(e) { return e.group === 'Both'; }) ||
+                  entries.find(function(e) { return e.group === 'JAG1'; }) || entries[0] || {};
+    lines.push('🏡 Venue: ' + (entry.venue || 'TBC'));
+    if (entry.organiser) lines.push('🎙️ Organiser: ' + displayName(entry.organiser));
+    lines.push('🎵 Praise & Worship: ' + (entry.pw         ? displayName(entry.pw)         : 'TBC'));
+    lines.push('📖 Facilitator: '      + (entry.facilitator ? displayName(entry.facilitator) : 'TBC'));
+    lines.push('🥘 Food: '             + (entry.food        || 'TBC'));
+    lines.push('✍️ Reporting: '        + (entry.reporting   ? displayName(entry.reporting)   : 'TBC'));
+    if (entry.iceBreaker) lines.push('🧊 Ice Breaker: ' + displayName(entry.iceBreaker));
+    if (entry.notes) lines.push('📝 ' + entry.notes);
   } else {
     [...entries].sort((a, b) => a.group === 'JAG1' ? -1 : 1).forEach(entry => {
       lines.push('— ' + entry.group + ' —');
@@ -1979,21 +1981,21 @@ function shareGroupWithNames(friday, entryOrArr) {
   }
 }
 
+function _clipboardFallback(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch(e) {}
+  document.body.removeChild(ta);
+}
+
 function _copyTextSilent(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).catch(() => {
-      const ta = document.createElement('textarea');
-      ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
-      document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); } catch(e) {}
-      document.body.removeChild(ta);
-    });
+    navigator.clipboard.writeText(text).catch(function() { _clipboardFallback(text); });
   } else {
-    const ta = document.createElement('textarea');
-    ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
-    document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); } catch(e) {}
-    document.body.removeChild(ta);
+    _clipboardFallback(text);
   }
 }
 
