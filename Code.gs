@@ -1,15 +1,16 @@
 // ============================================================
 // JAG Life Group Roster - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.29.2 (2026-04-23)
+// Version: 1.30.0 (2026-05-19)
 // ============================================================
 
-const VERSION      = '1.29.2';
-const VERSION_DATE = '2026-04-23';
+const VERSION      = '1.30.0';
+const VERSION_DATE = '2026-05-19';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
 const ROSTER_SHEET_NAME = 'Roster';   // year-agnostic — supports 2026 and beyond
 const MEMBERS_SHEET_NAME = 'Members';
+const LYRICS_SHEET_NAME  = 'Lyrics';
 
 // ---- Entry Point ----
 
@@ -311,6 +312,58 @@ function deleteMember(rowIndex) {
   try {
     SpreadsheetApp.openById(SPREADSHEET_ID)
       .getSheetByName(MEMBERS_SHEET_NAME)
+      .deleteRow(rowIndex);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// ---- Lyrics CRUD ----
+
+function getLyrics(ss) {
+  const sheet = (ss || SpreadsheetApp.openById(SPREADSHEET_ID)).getSheetByName(LYRICS_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+
+  const data = sheet.getDataRange().getValues();
+  // Row 1 is the header row; data starts at row 2 (index 1)
+  const lyrics = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0]) continue;
+    lyrics.push({
+      rowIndex:  i + 1,
+      songName:  String(row[0] || ''),
+      copyCount: Number(row[1]) || 0
+    });
+  }
+  return lyrics;
+}
+
+function saveLyric(lyric) {
+  try {
+    const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(LYRICS_SHEET_NAME);
+    if (!sheet) return { success: false, error: 'Lyrics sheet not found' };
+
+    const rowData = [lyric.songName, lyric.copyCount || 0];
+
+    if (lyric.rowIndex) {
+      sheet.getRange(lyric.rowIndex, 1, 1, 2).setValues([rowData]);
+    } else {
+      sheet.appendRow(rowData);
+    }
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+function deleteLyric(rowIndex) {
+  try {
+    SpreadsheetApp.openById(SPREADSHEET_ID)
+      .getSheetByName(LYRICS_SHEET_NAME)
       .deleteRow(rowIndex);
     return { success: true };
   } catch (e) {

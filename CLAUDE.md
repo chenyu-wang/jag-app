@@ -117,6 +117,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.29.0 | Attendee selection panel in Add/Edit form; in-memory `attendanceCache`; `+ 👥` share buttons filtered to selected attendees | n/a |
 | v1.29.1 | Save & Copy: auto-copy share text to clipboard on save (paths 3/4); extract `_buildCombinedShareText`/`_buildGroupShareText`; add `_copyTextSilent`; fix `buildSelect` free-text multi-person values; attendee panel polish (chevron, pill badge, separator above action buttons) | n/a |
 | v1.29.2 | Fix `displayName()` to return free-text values as-is (unknown members); fixes card display, share copy, and form edit for multi-person free-text like "Jemima & Eva" | n/a |
+| v1.30.0 | Lyrics tab: view, add, edit, delete songs (song name + copy count); lazy-loaded via `getLyrics()`; new Lyrics nav button (4th icon) | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
@@ -152,6 +153,17 @@ Only required when adding a new column or renaming an existing header. Steps:
 
 - Members tab uses positional reads (row[0]–row[8]) — column order must not change
 - To add a Members column: add `migrateSchemaToVXY()` (see naming rule above) and update `getMembers()` + `saveMember()`
+
+### Lyrics tab schema (v1.30.0, 2 columns)
+> Row 1: column headers. Row 2+: data. Positional reads (row[0]–row[1]).
+| Col | Sheet Header | Notes |
+|-----|-------------|-------|
+| A | Song Name | Song title (string) |
+| B | Copy Count | Number of physical lyric sheet copies (number, default 0) |
+
+- Lyrics are **lazy-loaded** via `getLyrics()` only when the user navigates to the Lyrics tab (`_lyricsLoaded` flag prevents repeated fetches)
+- CRUD: `getLyrics(ss)`, `saveLyric(lyric)`, `deleteLyric(rowIndex)` in Code.gs
+- Client state: `allLyrics`, `_lyricsLoaded`, `editingLyric` in Index.html
 
 ---
 
