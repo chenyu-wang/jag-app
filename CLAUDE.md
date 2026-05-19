@@ -120,6 +120,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.30.0 | Lyrics tab: view, add, edit, delete songs (song name + copy count); lazy-loaded via `getLyrics()`; new Lyrics nav button (4th icon) | n/a |
 | v1.30.2 | Performance: lyrics piggybacked onto `getAllData()` — tab now loads instantly; client-side pagination (40 at a time); `saveLyric()` returns rowIndex; fix default event time always 18:30 for all event types | n/a |
 | v1.30.3 | UX: save button shows "Saving…" and disables during all server calls (submitForm, submitMember, submitLyric) via `_setFormSaving`/`_setModalSaving`; skip `loadData()` after member edits (only needed for new members); preserve lyrics search query on add/edit/delete; debounce lyrics search 150ms | n/a |
+| v1.30.4 | Simplify: extract `PORTAL_NOTICE` const, `_applyNoticeStyle()`, `_createDropdown()`, `_dateChanged()` helpers in Code.gs; extract `_openConfirmModal()` in Index.html — eliminates 4×duplicate notice chains, 4×dropdown builds, 2×date comparisons, 3×confirm modal HTML | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.

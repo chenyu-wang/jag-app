@@ -1,16 +1,17 @@
 // ============================================================
 // JAG Life Group Roster - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.30.3 (2026-05-19)
+// Version: 1.30.4 (2026-05-19)
 // ============================================================
 
-const VERSION      = '1.30.3';
+const VERSION      = '1.30.4';
 const VERSION_DATE = '2026-05-19';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
 const ROSTER_SHEET_NAME = 'Roster';   // year-agnostic — supports 2026 and beyond
 const MEMBERS_SHEET_NAME = 'Members';
 const LYRICS_SHEET_NAME  = 'Lyrics';
+const PORTAL_NOTICE      = '⚠️  Please use the JAG Roster Portal to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/jagrosterportal';
 
 // ---- Entry Point ----
 
@@ -165,10 +166,7 @@ function saveRosterEntry(entry) {
     const needsSort = !entry.rowIndex || (function() {
       const oldCell = data[entry.rowIndex - 1] && data[entry.rowIndex - 1][col.date];
       if (!oldCell) return true;
-      const old = new Date(oldCell);
-      return old.getFullYear() !== dateObj.getFullYear() ||
-             old.getMonth()    !== dateObj.getMonth()    ||
-             old.getDate()     !== dateObj.getDate();
+      return _dateChanged(new Date(oldCell), dateObj);
     })();
 
     const rowData = new Array(numCols).fill('');
@@ -224,10 +222,7 @@ function saveRosterEntries(entries) {
       const newDate = _parseDate(entry.date);
       const oldCell = data[entry.rowIndex - 1] && data[entry.rowIndex - 1][col.date];
       if (!oldCell) return true;
-      const old = new Date(oldCell);
-      return old.getFullYear() !== newDate.getFullYear() ||
-             old.getMonth()    !== newDate.getMonth()    ||
-             old.getDate()     !== newDate.getDate();
+      return _dateChanged(new Date(oldCell), newDate);
     });
 
     entries.forEach(function(entry) {
@@ -374,6 +369,21 @@ function deleteLyric(rowIndex) {
 
 // ---- Helpers ----
 
+function _applyNoticeStyle(range) {
+  return range.setBackground('#fef08a').setFontColor('#713f12').setFontWeight('bold')
+    .setFontSize(9).setWrap(true).setVerticalAlignment('middle').setHorizontalAlignment('center');
+}
+
+function _createDropdown(values) {
+  return SpreadsheetApp.newDataValidation().requireValueInList(values, true).setAllowInvalid(false).build();
+}
+
+function _dateChanged(oldDate, newDate) {
+  return oldDate.getFullYear() !== newDate.getFullYear() ||
+         oldDate.getMonth()    !== newDate.getMonth()    ||
+         oldDate.getDate()     !== newDate.getDate();
+}
+
 // Parses a 'YYYY-MM-DD' string into a local Date without timezone shift.
 function _parseDate(dateStr) {
   const p = dateStr.split('-');
@@ -459,17 +469,13 @@ function _formatRosterSheet(ss) {
 
   // --- Group: dropdown validation ---
   if (col.group !== undefined) {
-    const v = SpreadsheetApp.newDataValidation()
-      .requireValueInList(['JAG1', 'JAG2', 'Both'], true).setAllowInvalid(false).build();
-    sheet.getRange(dataStartRow, col.group + 1, dataRows, 1).setDataValidation(v);
+    sheet.getRange(dataStartRow, col.group + 1, dataRows, 1).setDataValidation(_createDropdown(['JAG1', 'JAG2', 'Both']));
   }
 
   // --- Event Type: dropdown validation ---
   if (col.eventType !== undefined) {
-    const v = SpreadsheetApp.newDataValidation()
-      .requireValueInList(['Youth Hour', 'Separated LG', 'Combined', 'Special', 'Cancelled', 'Replaced'], true)
-      .setAllowInvalid(false).build();
-    sheet.getRange(dataStartRow, col.eventType + 1, dataRows, 1).setDataValidation(v);
+    sheet.getRange(dataStartRow, col.eventType + 1, dataRows, 1).setDataValidation(
+      _createDropdown(['Youth Hour', 'Separated LG', 'Combined', 'Special', 'Cancelled', 'Replaced']));
   }
 
   // --- Alternating row colours ---
@@ -498,15 +504,7 @@ function _formatRosterSheet(ss) {
   if (hasNoticeRow) {
     // Post-migration: notice spans data columns in row 1 (idempotent — safe to re-run)
     if (dataColCount > 0) {
-      sheet.getRange(1, 1, 1, dataColCount).merge()
-        .setValue('⚠️  Please use the JAG Roster Portal to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/jagrosterportal')
-        .setBackground('#fef08a')
-        .setFontColor('#713f12')
-        .setFontWeight('bold')
-        .setFontSize(9)
-        .setWrap(true)
-        .setVerticalAlignment('middle')
-        .setHorizontalAlignment('center');
+      _applyNoticeStyle(sheet.getRange(1, 1, 1, dataColCount).merge().setValue(PORTAL_NOTICE));
       sheet.setRowHeight(1, 48);
     }
   } else {
@@ -516,15 +514,7 @@ function _formatRosterSheet(ss) {
       sheet.getRange(1, dataColCount + 2, 1, maxCols - dataColCount - 1).clear();
     }
     const rNoticeCol = dataColCount + 2;
-    sheet.getRange(1, rNoticeCol, 1, 4).merge()
-      .setValue('⚠️  Please use the JAG Roster Portal to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/jagrosterportal')
-      .setBackground('#fef08a')
-      .setFontColor('#713f12')
-      .setFontWeight('bold')
-      .setFontSize(9)
-      .setWrap(true)
-      .setVerticalAlignment('middle')
-      .setHorizontalAlignment('center');
+    _applyNoticeStyle(sheet.getRange(1, rNoticeCol, 1, 4).merge().setValue(PORTAL_NOTICE));
     sheet.setColumnWidth(rNoticeCol, 320);
     sheet.setRowHeight(1, 48);
   }
@@ -562,17 +552,13 @@ function _formatMembersSheet(ss) {
   // --- Group: dropdown ---
   const groupIdx = lower.indexOf('group');
   if (groupIdx >= 0) {
-    const v = SpreadsheetApp.newDataValidation()
-      .requireValueInList(['JAG1', 'JAG2', 'Both', 'Sunday School'], true).setAllowInvalid(false).build();
-    sheet.getRange(dataStartRow, groupIdx + 1, dataRows, 1).setDataValidation(v);
+    sheet.getRange(dataStartRow, groupIdx + 1, dataRows, 1).setDataValidation(_createDropdown(['JAG1', 'JAG2', 'Both', 'Sunday School']));
   }
 
   // --- Role Type: dropdown ---
   const roleIdx = lower.indexOf('role type');
   if (roleIdx >= 0) {
-    const v = SpreadsheetApp.newDataValidation()
-      .requireValueInList(['Adult', 'Student', 'Older Sunday School', 'Harvest'], true).setAllowInvalid(false).build();
-    sheet.getRange(dataStartRow, roleIdx + 1, dataRows, 1).setDataValidation(v);
+    sheet.getRange(dataStartRow, roleIdx + 1, dataRows, 1).setDataValidation(_createDropdown(['Adult', 'Student', 'Older Sunday School', 'Harvest']));
   }
 
   // --- Boolean columns: checkbox ---
@@ -596,15 +582,7 @@ function _formatMembersSheet(ss) {
   sheet.getRange(1, 1, 1, sheet.getMaxColumns()).breakApart();
   if (hasNoticeRow) {
     // Post-migration: notice spans data columns in row 1 (idempotent — safe to re-run)
-    sheet.getRange(1, 1, 1, DATA_COL_COUNT).merge()
-      .setValue('⚠️  Please use the JAG Roster Portal to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/jagrosterportal')
-      .setBackground('#fef08a')
-      .setFontColor('#713f12')
-      .setFontWeight('bold')
-      .setFontSize(9)
-      .setWrap(true)
-      .setVerticalAlignment('middle')
-      .setHorizontalAlignment('center');
+    _applyNoticeStyle(sheet.getRange(1, 1, 1, DATA_COL_COUNT).merge().setValue(PORTAL_NOTICE));
     sheet.setRowHeight(1, 48);
   } else {
     // Pre-migration: notice to the right of data; clear stale columns first (growing-column fix)
@@ -613,15 +591,7 @@ function _formatMembersSheet(ss) {
       sheet.getRange(1, DATA_COL_COUNT + 2, 1, mMaxCols - DATA_COL_COUNT - 1).clear();
     }
     const mNoticeCol = DATA_COL_COUNT + 2;
-    sheet.getRange(1, mNoticeCol, 1, 4).merge()
-      .setValue('⚠️  Please use the JAG Roster Portal to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/jagrosterportal')
-      .setBackground('#fef08a')
-      .setFontColor('#713f12')
-      .setFontWeight('bold')
-      .setFontSize(9)
-      .setWrap(true)
-      .setVerticalAlignment('middle')
-      .setHorizontalAlignment('center');
+    _applyNoticeStyle(sheet.getRange(1, mNoticeCol, 1, 4).merge().setValue(PORTAL_NOTICE));
     sheet.setColumnWidth(mNoticeCol, 320);
     sheet.setRowHeight(1, 48);
   }

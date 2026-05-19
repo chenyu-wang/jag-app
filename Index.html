@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.30.3 (2026-05-19) -->
+  <!-- Version: 1.30.4 (2026-05-19) -->
   <title>JAG LG Roster</title>
   <style>
     /* ---- Reset & Base ---- */
@@ -1116,6 +1116,17 @@ function val(id) {
 // =============================================
 // Edit / Delete Entry
 // =============================================
+function _openConfirmModal(icon, title, subtitle, confirmLabel, confirmOnclick) {
+  openModal(
+    '<div style="text-align:center;padding:8px 0 16px;">' +
+      '<div style="font-size:2rem;margin-bottom:8px;">' + icon + '</div>' +
+      '<div style="font-weight:700;margin-bottom:6px;">' + title + '</div>' +
+      '<div style="color:#64748b;font-size:.85rem;margin-bottom:20px;">' + subtitle + '</div>' +
+      '<button class="btn btn-danger" onclick="' + confirmOnclick + '">' + confirmLabel + '</button>' +
+      '<button class="btn btn-secondary" style="margin-top:8px;" onclick="closeModal()">Cancel</button>' +
+    '</div>'
+  );
+}
 function openEditEntries(entries) {
   editingEntries = entries;
   activeGroups   = entries.map(e => e.group);
@@ -1135,14 +1146,8 @@ function openAddForDate(dateStr) {
 }
 
 function confirmDeleteEntries(rowIndices, date, label) {
-  openModal(`
-    <div style="text-align:center;padding:8px 0 16px;">
-      <div style="font-size:2rem;margin-bottom:8px;">&#128465;</div>
-      <div style="font-weight:700;margin-bottom:6px;">Delete ${_esc(label)} on ${_esc(date)}?</div>
-      <div style="color:#64748b;font-size:.85rem;margin-bottom:20px;">This cannot be undone.</div>
-      <button class="btn btn-danger" onclick="doDeleteEntries(${JSON.stringify(rowIndices)})">Yes, Delete</button>
-      <button class="btn btn-secondary" style="margin-top:8px;" onclick="closeModal()">Cancel</button>
-    </div>`);
+  _openConfirmModal('&#128465;', 'Delete ' + _esc(label) + ' on ' + _esc(date) + '?',
+    'This cannot be undone.', 'Yes, Delete', 'doDeleteEntries(' + JSON.stringify(rowIndices) + ')');
 }
 
 function doDeleteEntries(rowIndices) {
@@ -1326,15 +1331,8 @@ function submitMember() {
 }
 
 function confirmDeleteMember(rowIndex, name) {
-  openModal(`
-    <div style="text-align:center;padding:8px 0 16px;">
-      <div style="font-size:2rem;margin-bottom:8px;">👤</div>
-      <div style="font-weight:700;margin-bottom:6px;">Remove ${_esc(name)}?</div>
-      <div style="color:#64748b;font-size:.85rem;margin-bottom:20px;">They won't appear in future dropdowns.</div>
-      <button class="btn btn-danger" onclick="deleteMemberRow(${rowIndex})">Yes, Remove</button>
-      <button class="btn btn-secondary" style="margin-top:8px;" onclick="closeModal()">Cancel</button>
-    </div>
-  `);
+  _openConfirmModal('&#128100;', 'Remove ' + _esc(name) + '?',
+    "They won't appear in future dropdowns.", 'Yes, Remove', 'deleteMemberRow(' + rowIndex + ')');
 }
 
 function deleteMemberRow(rowIndex) {
@@ -2174,15 +2172,8 @@ function submitLyric() {
 }
 
 function confirmDeleteLyric(rowIndex, name) {
-  openModal(`
-    <div style="text-align:center;padding:8px 0 16px;">
-      <div style="font-size:2rem;margin-bottom:8px;">&#127925;</div>
-      <div style="font-weight:700;margin-bottom:6px;">Remove &ldquo;${_esc(name)}&rdquo;?</div>
-      <div style="color:#64748b;font-size:.85rem;margin-bottom:20px;">This cannot be undone.</div>
-      <button class="btn btn-danger" onclick="deleteLyricRow(${rowIndex})">Yes, Remove</button>
-      <button class="btn btn-secondary" style="margin-top:8px;" onclick="closeModal()">Cancel</button>
-    </div>
-  `);
+  _openConfirmModal('&#127925;', 'Remove “' + _esc(name) + '”?',
+    'This cannot be undone.', 'Yes, Remove', 'deleteLyricRow(' + rowIndex + ')');
 }
 
 function deleteLyricRow(rowIndex) {
