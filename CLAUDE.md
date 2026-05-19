@@ -121,6 +121,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.30.2 | Performance: lyrics piggybacked onto `getAllData()` — tab now loads instantly; client-side pagination (40 at a time); `saveLyric()` returns rowIndex; fix default event time always 18:30 for all event types | n/a |
 | v1.30.3 | UX: save button shows "Saving…" and disables during all server calls (submitForm, submitMember, submitLyric) via `_setFormSaving`/`_setModalSaving`; skip `loadData()` after member edits (only needed for new members); preserve lyrics search query on add/edit/delete; debounce lyrics search 150ms | n/a |
 | v1.30.4 | Simplify: extract `PORTAL_NOTICE` const, `_applyNoticeStyle()`, `_createDropdown()`, `_dateChanged()` helpers in Code.gs; extract `_openConfirmModal()` in Index.html — eliminates 4×duplicate notice chains, 4×dropdown builds, 2×date comparisons, 3×confirm modal HTML | n/a |
+| v1.30.5 | Nav: merge Home+Add into "Schedule" tab (calendar icon); Lyrics moves to 2nd tab, Members to 3rd; floating action button (FAB) replaces Add tab — shows on Schedule view only; `_updateFab()` toggles visibility; `setActiveNav` maps 'add'→'home' | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
@@ -232,7 +233,9 @@ Run `formatSheets()` from the Apps Script editor any time to apply human-readabl
 - `_buildCombinedShareText(friday, entries)` — pure text builder for combined/Youth Hour share message; used by `shareCombinedWithNames` and auto-copy in `submitForm` path 3
 - `_buildGroupShareText(friday, entryOrArr)` — pure text builder for per-group (JAG1/JAG2) share message; used by `shareGroupWithNames` and auto-copy in `submitForm` path 4
 - `_copyTextSilent(text)` — clipboard write with no toast (used by Save & Copy auto-copy; the `finishSave` toast covers user feedback)
-- Nav updates: use `setActiveNav(view)` — do not inline the `['home','add','members'].forEach(...)` pattern
+- Nav tabs: Schedule (home) | Lyrics | Members — 3 tabs only; "Add" is replaced by FAB (`#fab-add`)
+- `setActiveNav(view)` maps 'add'→'home' internally; iterates `['home','members','lyrics']` — do not inline this pattern
+- `_updateFab()` — shows/hides `#fab-add` based on `currentView === 'home'`; call it everywhere `currentView` changes: `showView`, `openEditEntries`, `openAddForDate`, `finishSave`, `renderView`
 - Card footers: use `buildCardFooter(friday, entries, ts)` — do not duplicate the Share/Edit button HTML
 - Encoding entries for `onclick`: use `encodeEntries(obj)` — replaces `JSON.stringify(obj).split('"').join('&quot;')`
 
