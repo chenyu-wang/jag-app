@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.30.2 (2026-05-19) -->
+  <!-- Version: 1.30.3 (2026-05-19) -->
   <title>JAG LG Roster</title>
   <style>
     /* ---- Reset & Base ---- */
@@ -224,7 +224,8 @@
 let allEntries = [];
 let allMembers = [];
 let allLyrics    = [];
-let _lyricsShown = 40; // how many lyrics are visible when not searching
+let _lyricsShown = 40;        // how many lyrics are visible when not searching
+let _lyricsSearchTimer = null; // debounce handle for the search input
 let currentView = 'home';
 let editingEntries = []; // [] = new, [e] = single edit, [e1,e2] = combined edit
 let editingMember  = null;
@@ -982,6 +983,7 @@ function submitForm() {
   const _timeVal = val('f-time');
   if (_timeVal && !/^\d{2}:\d{2}$/.test(_timeVal)) { showToast('Invalid time — use HH:MM format'); return; }
   saveAttendanceFromForm(date, eventType);
+  _setFormSaving(true);
 
   // For all non-Separated-LG events, a single "Both" entry is saved.
   // The existing entry is found by looking for "Both" first (new format),
@@ -1010,7 +1012,7 @@ function submitForm() {
         if (orphanRowIndex) google.script.run.deleteRosterEntry(orphanRowIndex);
         _mergeEntriesIntoCache(toSave); finishSave('Saved!', r.stable);
       })
-      .withFailureHandler(e => showToast('Error: '+e.message))
+      .withFailureHandler(function(e) { _setFormSaving(false); showToast('Error: ' + e.message); })
       .saveRosterEntries(toSave);
     return;
   }
@@ -1038,7 +1040,7 @@ function submitForm() {
         if (orphanRowIndex) google.script.run.deleteRosterEntry(orphanRowIndex);
         _mergeEntriesIntoCache(toSave); finishSave('Saved!', r.stable);
       })
-      .withFailureHandler(e => showToast('Error: '+e.message))
+      .withFailureHandler(function(e) { _setFormSaving(false); showToast('Error: ' + e.message); })
       .saveRosterEntries(toSave);
     return;
   }
@@ -1069,7 +1071,7 @@ function submitForm() {
         _copyTextSilent(_txt);
         finishSave('Saved & copied!', result.stable);
       })
-      .withFailureHandler(err => showToast('Error: ' + err.message))
+      .withFailureHandler(function(err) { _setFormSaving(false); showToast('Error: ' + err.message); })
       .saveRosterEntries(toSave);
     return;
   }
@@ -1102,7 +1104,7 @@ function submitForm() {
       _copyTextSilent(_buildGroupShareText(_friday, toSave[0]));
       finishSave('Saved & copied!', result.stable);
     })
-    .withFailureHandler(err => showToast('Error: ' + err.message))
+    .withFailureHandler(function(err) { _setFormSaving(false); showToast('Error: ' + err.message); })
     .saveRosterEntries(toSave);
 }
 
@@ -1300,12 +1302,13 @@ function submitMember() {
     active:       document.getElementById('m-active').value === 'true'
   };
 
+  const isNew = !editingMember;
+  _setModalSaving(true, 'Save Member');
   google.script.run
     .withSuccessHandler(function(result) {
-      if (!result.success) { showToast('Error: ' + result.error); return; }
+      if (!result.success) { _setModalSaving(false, 'Save Member'); showToast('Error: ' + result.error); return; }
       showToast('Member saved');
       closeModal();
-      // Optimistic cache update so members view renders immediately
       if (member.rowIndex) {
         const idx = allMembers.findIndex(function(m) { return m.rowIndex === member.rowIndex; });
         if (idx >= 0) allMembers[idx] = Object.assign({}, allMembers[idx], member);
@@ -1316,9 +1319,9 @@ function submitMember() {
       _dupFirstNamesCache = null;
       currentView = 'members';
       renderMembers();
-      loadData(); // refresh in background to get correct rowIndex for new members
+      if (isNew) loadData(); // only new members need server rowIndex sync
     })
-    .withFailureHandler(err => showToast('Error: ' + err.message))
+    .withFailureHandler(function(err) { _setModalSaving(false, 'Save Member'); showToast('Error: ' + err.message); })
     .saveMember(member);
 }
 
@@ -1998,6 +2001,23 @@ function _fallbackCopy(text) {
 }
 
 // =============================================
+// Save-state helpers — disable buttons while a server call is in flight
+// =============================================
+function _setFormSaving(saving) {
+  const btn = document.querySelector('#content .btn-primary');
+  if (!btn) return;
+  btn.disabled = saving;
+  btn.textContent = saving ? 'Saving…' : 'Save & Copy';
+}
+
+function _setModalSaving(saving, text) {
+  const btn = document.querySelector('#modal-box .btn-primary');
+  if (!btn) return;
+  btn.disabled = saving;
+  btn.textContent = saving ? 'Saving…' : (text || 'Save');
+}
+
+// =============================================
 // Lyrics View
 // =============================================
 function renderLyrics() {
@@ -2070,8 +2090,11 @@ function _renderLyricsList(query) {
 }
 
 function _filterLyrics() {
-  const q = (document.getElementById('lyrics-search') || {}).value || '';
-  _renderLyricsList(q);
+  clearTimeout(_lyricsSearchTimer);
+  _lyricsSearchTimer = setTimeout(function() {
+    const q = (document.getElementById('lyrics-search') || {}).value || '';
+    _renderLyricsList(q);
+  }, 150);
 }
 
 function buildLyricCard(lyric) {
@@ -2133,18 +2156,20 @@ function submitLyric() {
     copyCount: count
   };
 
+  const _lyricQ = (document.getElementById('lyrics-search') || {}).value || '';
+  _setModalSaving(true);
   google.script.run
     .withSuccessHandler(function(result) {
-      if (!result.success) { showToast('Error: ' + result.error); return; }
+      if (!result.success) { _setModalSaving(false); showToast('Error: ' + result.error); return; }
       showToast('Saved!');
       closeModal();
       lyric.rowIndex = result.rowIndex;
       const idx = allLyrics.findIndex(function(l) { return l.rowIndex === lyric.rowIndex; });
       if (idx >= 0) allLyrics[idx] = Object.assign({}, allLyrics[idx], lyric);
       else allLyrics.push(lyric);
-      _renderLyricsContent();
+      _renderLyricsList(_lyricQ);
     })
-    .withFailureHandler(function(err) { showToast('Error: ' + err.message); })
+    .withFailureHandler(function(err) { _setModalSaving(false); showToast('Error: ' + err.message); })
     .saveLyric(lyric);
 }
 
@@ -2161,13 +2186,14 @@ function confirmDeleteLyric(rowIndex, name) {
 }
 
 function deleteLyricRow(rowIndex) {
+  const q = (document.getElementById('lyrics-search') || {}).value || '';
   closeModal();
   google.script.run
     .withSuccessHandler(function(result) {
       if (!result.success) { showToast('Error: ' + result.error); return; }
       showToast('Song removed');
       allLyrics = allLyrics.filter(function(l) { return l.rowIndex !== rowIndex; });
-      _renderLyricsContent();
+      _renderLyricsList(q);
     })
     .withFailureHandler(function(err) { showToast('Error: ' + err.message); })
     .deleteLyric(rowIndex);
