@@ -118,6 +118,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.29.1 | Save & Copy: auto-copy share text to clipboard on save (paths 3/4); extract `_buildCombinedShareText`/`_buildGroupShareText`; add `_copyTextSilent`; fix `buildSelect` free-text multi-person values; attendee panel polish (chevron, pill badge, separator above action buttons) | n/a |
 | v1.29.2 | Fix `displayName()` to return free-text values as-is (unknown members); fixes card display, share copy, and form edit for multi-person free-text like "Jemima & Eva" | n/a |
 | v1.30.0 | Lyrics tab: view, add, edit, delete songs (song name + copy count); lazy-loaded via `getLyrics()`; new Lyrics nav button (4th icon) | n/a |
+| v1.30.2 | Performance: lyrics piggybacked onto `getAllData()` — tab now loads instantly; client-side pagination (40 at a time); `saveLyric()` returns rowIndex; fix default event time always 18:30 for all event types | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.

@@ -1,10 +1,10 @@
 // ============================================================
 // JAG Life Group Roster - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.30.0 (2026-05-19)
+// Version: 1.30.2 (2026-05-19)
 // ============================================================
 
-const VERSION      = '1.30.0';
+const VERSION      = '1.30.2';
 const VERSION_DATE = '2026-05-19';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -33,7 +33,8 @@ function getAllData() {
   return {
     entries:     getRosterEntries(ss),
     members:     getMembers(ss),
-    version:     VERSION,      // A: version piggybacked on the data call — eliminates getVersion() round-trip
+    lyrics:      getLyrics(ss),  // piggybacked — eliminates a separate round-trip when opening Lyrics tab
+    version:     VERSION,
     versionDate: VERSION_DATE
   };
 }
@@ -350,11 +351,11 @@ function saveLyric(lyric) {
 
     if (lyric.rowIndex) {
       sheet.getRange(lyric.rowIndex, 1, 1, 2).setValues([rowData]);
+      return { success: true, rowIndex: lyric.rowIndex };
     } else {
       sheet.appendRow(rowData);
+      return { success: true, rowIndex: sheet.getLastRow() };
     }
-
-    return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
   }

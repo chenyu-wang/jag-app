@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.30.0 (2026-05-19) -->
+  <!-- Version: 1.30.2 (2026-05-19) -->
   <title>JAG LG Roster</title>
   <style>
     /* ---- Reset & Base ---- */
@@ -223,8 +223,8 @@
 // =============================================
 let allEntries = [];
 let allMembers = [];
-let allLyrics  = [];
-let _lyricsLoaded = false;
+let allLyrics    = [];
+let _lyricsShown = 40; // how many lyrics are visible when not searching
 let currentView = 'home';
 let editingEntries = []; // [] = new, [e] = single edit, [e1,e2] = combined edit
 let editingMember  = null;
@@ -279,6 +279,7 @@ function loadData() {
       if (gen !== _loadGen) return;  // stale response — a newer loadData() already fired
       allEntries = data.entries || [];
       allMembers = data.members || [];
+      allLyrics  = data.lyrics  || [];
       _scheduleDatesCache = null;  // D: invalidate on fresh data
       _entriesByDateCache = null;
       _dupFirstNamesCache = null;  // F: invalidate on fresh data
@@ -666,10 +667,9 @@ function renderAdd(prefillDate) {
     ? (_legacyTypeMap[refEntry.eventType] || refEntry.eventType)
     : suggestEventType(new Date(defaultDate));
 
-  const _stdTypes = ['Youth Hour', 'Separated LG', 'Combined'];
   const defaultTime = isEdit
-    ? (refEntry.time || (_stdTypes.includes(defaultType) ? '18:30' : ''))
-    : (_stdTypes.includes(defaultType) ? '18:30' : '');
+    ? (refEntry.time || '18:30')
+    : '18:30';
 
   const titleText = isEdit ? 'Edit Event' : 'Schedule Event';
 
@@ -2000,27 +2000,9 @@ function _fallbackCopy(text) {
 // =============================================
 // Lyrics View
 // =============================================
-function loadLyrics(callback) {
-  google.script.run
-    .withSuccessHandler(function(data) {
-      allLyrics = data || [];
-      _lyricsLoaded = true;
-      if (callback) callback();
-    })
-    .withFailureHandler(function(err) {
-      showToast('Failed to load lyrics: ' + (err.message || String(err)));
-    })
-    .getLyrics();
-}
-
 function renderLyrics() {
-  const c = document.getElementById('content');
-  if (!_lyricsLoaded) {
-    c.innerHTML = '<div class="loading">Loading lyrics...</div>';
-    loadLyrics(function() { _renderLyricsContent(); });
-  } else {
-    _renderLyricsContent();
-  }
+  _lyricsShown = 40;
+  _renderLyricsContent();
 }
 
 function _renderLyricsContent() {
@@ -2069,7 +2051,22 @@ function _renderLyricsList(query) {
     return;
   }
 
-  sorted.forEach(function(l) { listEl.appendChild(buildLyricCard(l)); });
+  // When searching show all matches; when browsing show _lyricsShown at a time
+  const visible = q ? sorted : sorted.slice(0, _lyricsShown);
+  visible.forEach(function(l) { listEl.appendChild(buildLyricCard(l)); });
+
+  if (!q && sorted.length > _lyricsShown) {
+    const remaining = sorted.length - _lyricsShown;
+    const moreBtn = document.createElement('button');
+    moreBtn.className = 'add-lyric-btn';
+    moreBtn.style.marginTop = '8px';
+    moreBtn.textContent = 'Show ' + remaining + ' more…';
+    moreBtn.onclick = function() {
+      _lyricsShown += 40;
+      _renderLyricsList('');
+    };
+    listEl.appendChild(moreBtn);
+  }
 }
 
 function _filterLyrics() {
@@ -2141,14 +2138,11 @@ function submitLyric() {
       if (!result.success) { showToast('Error: ' + result.error); return; }
       showToast('Saved!');
       closeModal();
-      if (lyric.rowIndex) {
-        const idx = allLyrics.findIndex(function(l) { return l.rowIndex === lyric.rowIndex; });
-        if (idx >= 0) allLyrics[idx] = Object.assign({}, allLyrics[idx], lyric);
-        else allLyrics.push(lyric);
-        _renderLyricsContent();
-      } else {
-        loadLyrics(_renderLyricsContent);
-      }
+      lyric.rowIndex = result.rowIndex;
+      const idx = allLyrics.findIndex(function(l) { return l.rowIndex === lyric.rowIndex; });
+      if (idx >= 0) allLyrics[idx] = Object.assign({}, allLyrics[idx], lyric);
+      else allLyrics.push(lyric);
+      _renderLyricsContent();
     })
     .withFailureHandler(function(err) { showToast('Error: ' + err.message); })
     .saveLyric(lyric);
