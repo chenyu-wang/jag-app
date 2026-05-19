@@ -123,6 +123,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.30.4 | Simplify: extract `PORTAL_NOTICE` const, `_applyNoticeStyle()`, `_createDropdown()`, `_dateChanged()` helpers in Code.gs; extract `_openConfirmModal()` in Index.html — eliminates 4×duplicate notice chains, 4×dropdown builds, 2×date comparisons, 3×confirm modal HTML | n/a |
 | v1.30.5 | Nav: merge Home+Add into "Schedule" tab (calendar icon); Lyrics moves to 2nd tab, Members to 3rd; floating action button (FAB) replaces Add tab — shows on Schedule view only; `_updateFab()` toggles visibility; `setActiveNav` maps 'add'→'home' | n/a |
 | v1.30.6 | Bug fix: `generateShareText` now reads "Both"-group entries (Special share was showing all TBC since v1.26); Special branch shows only set fields + custom notes; combined branch uses single-entry lookup. Extract `_clipboardFallback()`; add `_activeCache` for `getActive()` | n/a |
+| v1.30.7 | Rename site to "JAG Life Group Portal" (browser tab title, header h1, Apps Script window title) | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.

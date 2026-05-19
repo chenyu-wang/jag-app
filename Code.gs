@@ -1,10 +1,10 @@
 // ============================================================
 // JAG Life Group Roster - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.30.6 (2026-05-19)
+// Version: 1.30.7 (2026-05-19)
 // ============================================================
 
-const VERSION      = '1.30.6';
+const VERSION      = '1.30.7';
 const VERSION_DATE = '2026-05-19';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -17,7 +17,7 @@ const PORTAL_NOTICE      = '⚠️  Please use the JAG Roster Portal to make cha
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('JAG LG Roster v' + VERSION)
+    .setTitle('JAG Life Group Portal v' + VERSION)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
