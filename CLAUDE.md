@@ -125,6 +125,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.30.6 | Bug fix: `generateShareText` now reads "Both"-group entries (Special share was showing all TBC since v1.26); Special branch shows only set fields + custom notes; combined branch uses single-entry lookup. Extract `_clipboardFallback()`; add `_activeCache` for `getActive()` | n/a |
 | v1.30.7 | Rename site to "JAG Life Group Portal" (browser tab title, header h1, Apps Script window title) | n/a |
 | v1.30.8 | FAB unified across all views: shows on Schedule (add event), Lyrics (add song), Members (add member); `fabAction()` dispatcher; inline add buttons removed from Members and Lyrics views | n/a |
+| v1.31.0 | Performance: SSR via `createTemplateFromFile` — data injected in `doGet()` as `_INITIAL_DATA`, page renders instantly on load; `CacheService` 60s cache on `getAllData()`; `_clearDataCache()` called on every write to prevent stale data | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.

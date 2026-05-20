@@ -1,11 +1,11 @@
 // ============================================================
 // JAG Life Group Roster - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.30.8 (2026-05-19)
+// Version: 1.31.0 (2026-05-20)
 // ============================================================
 
-const VERSION      = '1.30.8';
-const VERSION_DATE = '2026-05-19';
+const VERSION      = '1.31.0';
+const VERSION_DATE = '2026-05-20';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
 const ROSTER_SHEET_NAME = 'Roster';   // year-agnostic — supports 2026 and beyond
@@ -16,7 +16,16 @@ const PORTAL_NOTICE      = '⚠️  Please use the JAG Roster Portal to make cha
 // ---- Entry Point ----
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+  const template = HtmlService.createTemplateFromFile('Index');
+  try {
+    // Inject pre-loaded data so the page renders immediately — no second round-trip needed.
+    // Escape </script so the JSON literal can't break the surrounding <script> tag.
+    template.initialData = JSON.stringify(getAllData()).replace(/<\/script/gi, '<\\/script');
+  } catch(e) {
+    template.initialData = 'null'; // fallback: client calls loadData() instead
+    Logger.log('doGet data load error: ' + e);
+  }
+  return template.evaluate()
     .setTitle('JAG Life Group Portal v' + VERSION)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -29,15 +38,25 @@ function getVersion() {
 // ---- Data Fetching ----
 
 function getAllData() {
+  // C: serve from cache when available — avoids opening the spreadsheet on every load.
+  // Cache is cleared by _clearDataCache() on every write, so it never serves stale data after saves.
+  const cache = CacheService.getScriptCache();
+  try {
+    const hit = cache.get('allData');
+    if (hit) return JSON.parse(hit);
+  } catch(e) {}
+
   // B: open spreadsheet once and share it — avoids two separate openById calls
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  return {
+  const data = {
     entries:     getRosterEntries(ss),
     members:     getMembers(ss),
-    lyrics:      getLyrics(ss),  // piggybacked — eliminates a separate round-trip when opening Lyrics tab
+    lyrics:      getLyrics(ss),
     version:     VERSION,
     versionDate: VERSION_DATE
   };
+  try { cache.put('allData', JSON.stringify(data), 60); } catch(e) {} // 60s TTL; silent if >100KB
+  return data;
 }
 
 function _normalizeStr(s) { return String(s == null ? '' : s).toLowerCase().trim(); }
@@ -192,6 +211,7 @@ function saveRosterEntry(entry) {
     }
 
     SpreadsheetApp.flush(); // commit writes before sort so getLastColumn() sees col M
+    _clearDataCache();
     if (needsSort) {
       sortRosterSheet(sheet);
       return { success: true };
@@ -251,6 +271,7 @@ function saveRosterEntries(entries) {
     });
 
     SpreadsheetApp.flush(); // commit writes before sort so getLastColumn() sees col M
+    _clearDataCache();
     if (needsSort) {
       sortRosterSheet(sheet);
       return { success: true };
@@ -266,6 +287,7 @@ function deleteRosterEntry(rowIndex) {
     SpreadsheetApp.openById(SPREADSHEET_ID)
       .getSheetByName(ROSTER_SHEET_NAME)
       .deleteRow(rowIndex);
+    _clearDataCache();
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -298,6 +320,7 @@ function saveMember(member) {
       sheet.appendRow(rowData);
     }
 
+    _clearDataCache();
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -309,6 +332,7 @@ function deleteMember(rowIndex) {
     SpreadsheetApp.openById(SPREADSHEET_ID)
       .getSheetByName(MEMBERS_SHEET_NAME)
       .deleteRow(rowIndex);
+    _clearDataCache();
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -346,9 +370,11 @@ function saveLyric(lyric) {
 
     if (lyric.rowIndex) {
       sheet.getRange(lyric.rowIndex, 1, 1, 2).setValues([rowData]);
+      _clearDataCache();
       return { success: true, rowIndex: lyric.rowIndex };
     } else {
       sheet.appendRow(rowData);
+      _clearDataCache();
       return { success: true, rowIndex: sheet.getLastRow() };
     }
   } catch (e) {
@@ -361,6 +387,7 @@ function deleteLyric(rowIndex) {
     SpreadsheetApp.openById(SPREADSHEET_ID)
       .getSheetByName(LYRICS_SHEET_NAME)
       .deleteRow(rowIndex);
+    _clearDataCache();
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -368,6 +395,10 @@ function deleteLyric(rowIndex) {
 }
 
 // ---- Helpers ----
+
+function _clearDataCache() {
+  try { CacheService.getScriptCache().remove('allData'); } catch(e) {}
+}
 
 function _applyNoticeStyle(range) {
   return range.setBackground('#fef08a').setFontColor('#713f12').setFontWeight('bold')

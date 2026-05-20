@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.30.8 (2026-05-19) -->
+  <!-- Version: 1.31.0 (2026-05-20) -->
   <title>JAG Life Group Portal</title>
   <style>
     /* ---- Reset & Base ---- */
@@ -218,6 +218,10 @@
 <div id="toast"></div>
 
 <script>
+// Injected by doGet() — page renders immediately without a second round-trip.
+// Falls back to loadData() if null (SSR failed or cold-start error).
+const _INITIAL_DATA = <?!= initialData ?>;
+
 // =============================================
 // State
 // =============================================
@@ -250,7 +254,24 @@ function _esc(s) {
 // Init
 // =============================================
 document.addEventListener('DOMContentLoaded', function() {
-  loadData();
+  if (_INITIAL_DATA) {
+    allEntries = _INITIAL_DATA.entries || [];
+    allMembers = _INITIAL_DATA.members || [];
+    allLyrics  = _INITIAL_DATA.lyrics  || [];
+    _scheduleDatesCache = null;
+    _entriesByDateCache = null;
+    _dupFirstNamesCache = null;
+    _activeCache = null;
+    const loadingEl = document.getElementById('loading-msg');
+    if (loadingEl) loadingEl.remove();
+    if (_INITIAL_DATA.version) {
+      const el = document.getElementById('header-sub');
+      if (el) el.textContent = 'v' + _INITIAL_DATA.version;
+    }
+    renderView();
+  } else {
+    loadData(); // fallback: SSR data unavailable, fetch async
+  }
   document.getElementById('content').addEventListener('scroll', function() {
     if (currentView !== 'home' || _dashBusy) return;
     const el = this;
