@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.32.0 (2026-05-20) -->
+  <!-- Version: 1.32.1 (2026-05-20) -->
   <title>JAG Life Group Portal</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -889,7 +889,7 @@ function rebuildSections(eventType) {
       <div class="field-row">
         <div class="field">
           <label>🎵 Praise &amp; Worship</label>
-          ${buildSelect('shared-pw', getEligible('pw', null, true), ref.pw||'')}
+          ${buildSelect('shared-pw', _historicalValues('pw'), ref.pw||'')}
         </div>
         <div class="field">
           <label>📖 Facilitator</label>
@@ -944,7 +944,7 @@ function rebuildSections(eventType) {
       <div class="field-row">
         <div class="field">
           <label>🎵 Praise &amp; Worship</label>
-          ${buildSelect(grp+'-pw', getEligible('pw', grp, false), entry.pw||'')}
+          ${buildSelect(grp+'-pw', _historicalValues('pw'), entry.pw||'')}
         </div>
         <div class="field">
           <label>📖 Facilitator</label>
