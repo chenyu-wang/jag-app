@@ -128,6 +128,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.31.0 | Performance: SSR via `createTemplateFromFile` — data injected in `doGet()` as `_INITIAL_DATA`, page renders instantly on load; `CacheService` 60s cache on `getAllData()`; `_clearDataCache()` called on every write to prevent stale data | n/a |
 | v1.32.0 | Installable PWA: canvas-rendered PNG icon (indigo #6366f1 rounded rect + white "JAG" text); manifest injected via Blob URL IIFE (standalone display); iOS meta tags + `apple-touch-icon` set from canvas PNG (SVG not supported on iOS). Historical venue/food picklists: `_historicalValues(field)` returns values sorted by frequency; venue+food `<input>` replaced with `buildSelect` + `_historicalValues` in all form branches (Special, Combined, Separated LG) | n/a |
 | v1.32.1 | P&W picklist: replaced `getEligible('pw', ...)` with `_historicalValues('pw')` in Combined and Separated LG forms — shows most-used P&W leaders first | n/a |
+| v1.32.2 | Organiser picklist: replaced `getEligible('organiser', ...)` with `_historicalValues('organiser')` in Combined and Separated LG forms | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.

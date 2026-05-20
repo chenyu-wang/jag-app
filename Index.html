@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.32.1 (2026-05-20) -->
+  <!-- Version: 1.32.2 (2026-05-20) -->
   <title>JAG Life Group Portal</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -880,7 +880,7 @@ function rebuildSections(eventType) {
       </div>
       <div class="field">
         <label>Organiser (optional)</label>
-        ${buildSelect('shared-organiser', getEligible('organiser', null, true), ref.organiser||'')}
+        ${buildSelect('shared-organiser', _historicalValues('organiser'), ref.organiser||'')}
       </div>
       <div class="field">
         <label>🥘 Food (Shared)</label>
@@ -934,7 +934,7 @@ function rebuildSections(eventType) {
       <div class="field-row">
         <div class="field">
           <label>Organiser (optional)</label>
-          ${buildSelect(grp+'-organiser', getEligible('organiser', grp, false), entry.organiser||'')}
+          ${buildSelect(grp+'-organiser', _historicalValues('organiser'), entry.organiser||'')}
         </div>
         <div class="field">
           <label>🥘 Food</label>
