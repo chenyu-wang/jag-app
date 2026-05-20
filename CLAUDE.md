@@ -126,6 +126,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.30.7 | Rename site to "JAG Life Group Portal" (browser tab title, header h1, Apps Script window title) | n/a |
 | v1.30.8 | FAB unified across all views: shows on Schedule (add event), Lyrics (add song), Members (add member); `fabAction()` dispatcher; inline add buttons removed from Members and Lyrics views | n/a |
 | v1.31.0 | Performance: SSR via `createTemplateFromFile` — data injected in `doGet()` as `_INITIAL_DATA`, page renders instantly on load; `CacheService` 60s cache on `getAllData()`; `_clearDataCache()` called on every write to prevent stale data | n/a |
+| v1.32.0 | Installable PWA: canvas-rendered PNG icon (indigo #6366f1 rounded rect + white "JAG" text); manifest injected via Blob URL IIFE (standalone display); iOS meta tags + `apple-touch-icon` set from canvas PNG (SVG not supported on iOS). Historical venue/food picklists: `_historicalValues(field)` returns values sorted by frequency; venue+food `<input>` replaced with `buildSelect` + `_historicalValues` in all form branches (Special, Combined, Separated LG) | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
@@ -241,6 +242,7 @@ Run `formatSheets()` from the Apps Script editor any time to apply human-readabl
 - `setActiveNav(view)` maps 'add'→'home' internally; iterates `['home','members','lyrics']` — do not inline this pattern
 - `_updateFab()` — shows/hides `#fab-add` and sets its title; visible on `home`, `members`, `lyrics` views; call it everywhere `currentView` changes: `showView`, `openEditEntries`, `openAddForDate`, `finishSave`, `renderView`
 - `fabAction()` — FAB click dispatcher: `home` → `showView('add')`, `members` → `openMemberForm(null)`, `lyrics` → `openLyricForm(null)`
+- `_historicalValues(field)` — returns unique non-empty values of `allEntries[field]` sorted by frequency (most-used first); used as picklist options for venue and food in `buildSelect` calls inside `rebuildSections`
 - Card footers: use `buildCardFooter(friday, entries, ts)` — do not duplicate the Share/Edit button HTML
 - Encoding entries for `onclick`: use `encodeEntries(obj)` — replaces `JSON.stringify(obj).split('"').join('&quot;')`
 

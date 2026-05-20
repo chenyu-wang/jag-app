@@ -3,8 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.31.0 (2026-05-20) -->
+  <!-- Version: 1.32.0 (2026-05-20) -->
   <title>JAG Life Group Portal</title>
+  <meta name="theme-color" content="#6366f1" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="JAG Portal" />
+  <link rel="apple-touch-icon" />
   <style>
     /* ---- Reset & Base ---- */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -845,7 +851,7 @@ function rebuildSections(eventType) {
     div.innerHTML = `
       <div class="field">
         <label>🏡 Venue (optional)</label>
-        <input type="text" id="shared-venue" placeholder="Type venue..." value="${_esc(ref.venue)}" />
+        ${buildSelect('shared-venue', _historicalValues('venue'), ref.venue||'')}
       </div>
       <div class="field">
         <label>💬 Comments (optional)</label>
@@ -870,7 +876,7 @@ function rebuildSections(eventType) {
     div.innerHTML = `
       <div class="field">
         <label>🏡 Venue (Shared)</label>
-        <input type="text" id="shared-venue" placeholder="Type venue..." value="${_esc(ref.venue)}" />
+        ${buildSelect('shared-venue', _historicalValues('venue'), ref.venue||'')}
       </div>
       <div class="field">
         <label>Organiser (optional)</label>
@@ -878,7 +884,7 @@ function rebuildSections(eventType) {
       </div>
       <div class="field">
         <label>🥘 Food (Shared)</label>
-        <input type="text" id="shared-food" placeholder="Type food..." value="${ref.food||''}" />
+        ${buildSelect('shared-food', _historicalValues('food'), ref.food||'')}
       </div>
       <div class="field-row">
         <div class="field">
@@ -923,7 +929,7 @@ function rebuildSections(eventType) {
       <div class="form-section-title ${titleClass}">${grp}</div>
       <div class="field">
         <label>🏡 Venue</label>
-        <input type="text" id="${grp}-venue" placeholder="Type venue..." value="${_esc(entry.venue)}" />
+        ${buildSelect(grp+'-venue', _historicalValues('venue'), entry.venue||'')}
       </div>
       <div class="field-row">
         <div class="field">
@@ -932,7 +938,7 @@ function rebuildSections(eventType) {
         </div>
         <div class="field">
           <label>🥘 Food</label>
-          <input type="text" id="${grp}-food" placeholder="Type food..." value="${entry.food||''}" />
+          ${buildSelect(grp+'-food', _historicalValues('food'), entry.food||'')}
         </div>
       </div>
       <div class="field-row">
@@ -1414,6 +1420,15 @@ function getActive() {
   if (_activeCache) return _activeCache;
   _activeCache = allMembers.filter(m => m.active && !_isNoRoleType(m.roleType));
   return _activeCache;
+}
+
+function _historicalValues(field) {
+  const freq = {};
+  allEntries.forEach(function(e) {
+    const v = e[field];
+    if (v) freq[v] = (freq[v] || 0) + 1;
+  });
+  return Object.keys(freq).sort(function(a, b) { return freq[b] - freq[a]; });
 }
 
 function groupMatch(member, group) {
@@ -2243,6 +2258,64 @@ function showToast(msg) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
 }
+
+// =============================================
+// PWA manifest + home screen icon (canvas-rendered PNG)
+// =============================================
+(function() {
+  const size = 512, r = 80;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Rounded-rect background (#6366f1 indigo)
+  ctx.beginPath();
+  ctx.moveTo(r, 0); ctx.lineTo(size - r, 0);
+  ctx.arcTo(size, 0, size, r, r);
+  ctx.lineTo(size, size - r);
+  ctx.arcTo(size, size, size - r, size, r);
+  ctx.lineTo(r, size);
+  ctx.arcTo(0, size, 0, size - r, r);
+  ctx.lineTo(0, r);
+  ctx.arcTo(0, 0, r, 0, r);
+  ctx.closePath();
+  ctx.fillStyle = '#6366f1';
+  ctx.fill();
+
+  // "JAG" text — bold white centered
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 230px system-ui, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('JAG', size / 2, 350);
+
+  const iconUrl = canvas.toDataURL('image/png');
+
+  // Apple touch icon (iOS home screen — must be PNG)
+  const touchIcon = document.querySelector('link[rel="apple-touch-icon"]') || document.createElement('link');
+  touchIcon.rel  = 'apple-touch-icon';
+  touchIcon.href = iconUrl;
+  if (!touchIcon.parentNode) document.head.appendChild(touchIcon);
+
+  // Web app manifest (Android/Chrome PWA)
+  const manifest = {
+    name: 'JAG Life Group Portal',
+    short_name: 'JAG Portal',
+    start_url: location.href,
+    display: 'standalone',
+    background_color: '#6366f1',
+    theme_color: '#6366f1',
+    icons: [
+      { src: iconUrl, sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: iconUrl, sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+    ]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const link = document.createElement('link');
+  link.rel  = 'manifest';
+  link.href = URL.createObjectURL(blob);
+  document.head.appendChild(link);
+})();
 </script>
 </body>
 </html>
