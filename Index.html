@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.32.2 (2026-05-20) -->
-  <title>JAG Life Group Portal</title>
+  <!-- Version: 1.32.3 (2026-05-20) -->
+  <title>JAG Portal</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="JAG Portal" />
-  <link rel="apple-touch-icon" />
+  <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAIAAACyr5FlAAACOklEQVR42u3dSW6EQAxAUd+1pdw/J+hk2wN0TZBgv9JfIpBcb4EAibifuG5f35rszP0KCKA5A4cdSqYkmKDkEBw2IDeRwAKRlTjMuoiPwAKRBThMtpqPIIOPKRymWdNHkMHHIA4TrOwjyOCjG4ep8RFkaMsHHOrBYVJ8vMdhRnzAoU4cpiM41InDXPTkAw7BoWEcJqJXH3AIDo3hMAu99QGH4BAcgkNwCA7BoavhMAVtBYfgEByCQ3AIDsEhOASH4BAcEhyCQ3AIDsEhOASH4BAcgkOCQ3AIDsEhOASH4BAcgkNwSHAIDsEhOASH4BAcgkNw/H33hvX/zwAHHHDAAQcccFwVyqojt46fPwMccMABBxxwwAHHehxuSOGAAw444ICjOo7etX+tfA/E4IADDjjggKMujpaN8RAMDjjggAMOOOCAAw444IADDjjgyPKB8dE4fGAMBxxwwAEHHHVfvAkOwSE4BIfgEByCQ4JDcAgOwSE4BIfgEByCQ3AIDgkOwSE4BIfgEByCQ3AIDsEhwSE4BIfgEByCQ3AIDsEhOCQ4tIcj/Z9zNdYvDDgEh+AQHIJDcAgOXRAHH3qVAYfg0AwOPvQkAw7BoUkcfOj2+DNUONSGgw8y4NAQDj7I2MPBBxlwaAgHH2Ts4eCjuIwPOPioLOMzDj7KymjCwUdNGa04+CgoowMHH9Vk9OHgo5SMbhyIFGExjoOPCjLGcSCSm8UCHIhkZbEMByXJTByCg5IcJo7FAc21EGytH8KLkMHbCdGrAAAAAElFTkSuQmCC" />
   <style>
     /* ---- Reset & Base ---- */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -189,7 +189,7 @@
 <body>
 <div id="app">
   <header>
-    <h1>JAG Life Group Portal</h1>
+    <h1>JAG Portal</h1>
     <p id="header-sub">Loading...</p>
   </header>
 
@@ -2299,7 +2299,7 @@ function showToast(msg) {
 
   // Web app manifest (Android/Chrome PWA)
   const manifest = {
-    name: 'JAG Life Group Portal',
+    name: 'JAG Portal',
     short_name: 'JAG Portal',
     start_url: location.href,
     display: 'standalone',
