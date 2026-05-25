@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.35.0 (2026-05-25) -->
+  <!-- Version: 1.35.1 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1299,7 +1299,7 @@ function openMemberForm(member) {
     <div class="field-row">
       <div class="field">
         <label>Group</label>
-        <select id="m-group">
+        <select id="m-group" onchange="updateRoleToggles()">
           <option value="JAG1" ${m.group==='JAG1'?'selected':''}>JAG1</option>
           <option value="JAG2" ${m.group==='JAG2'?'selected':''}>JAG2</option>
           <option value="Both" ${m.group==='Both'?'selected':''}>Both</option>
@@ -1423,15 +1423,22 @@ function _isNoRoleType(roleType) {
 }
 
 function updateRoleToggles() {
-  const rt = document.getElementById('m-roletype');
+  const rt  = document.getElementById('m-roletype');
+  const grp = document.getElementById('m-group');
   if (!rt) return;
-  const disabled = _isNoRoleType(rt.value);
+  const noRole     = _isNoRoleType(rt.value);
+  const noDrive    = rt.value !== 'Adult' || (grp && grp.value !== 'JAG1');
   ['mt-organise', 'mt-pw', 'mt-facilitate', 'mt-report'].forEach(id => {
     const btn = document.getElementById(id);
     if (!btn) return;
-    btn.disabled = disabled;
-    if (disabled) btn.classList.remove('on');
+    btn.disabled = noRole;
+    if (noRole) btn.classList.remove('on');
   });
+  const driveBtn = document.getElementById('mt-drive');
+  if (driveBtn) {
+    driveBtn.disabled = noDrive;
+    if (noDrive) driveBtn.classList.remove('on');
+  }
 }
 
 function getActive() {

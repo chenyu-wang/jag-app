@@ -141,6 +141,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.34.0 | Rename "Roster" sheet tab to "Schedule" (`ROSTER_SHEET_NAME = 'Schedule'`); fix Lyrics header style (bold + `#ede9fe` bg); fix Members Last Updated checkbox (clearDataValidations); rename file header comment to "JAG App" | `migrateSchemaToV134()` |
 | v1.34.1 | Always show Last Updated line on member and lyric cards — display "—" for records not yet stamped instead of hiding the field | n/a |
 | v1.35.0 | Add Birthday field to Members (col K, `YYYY-MM-DD`); birthday input in member form; shown on member card meta line; 🎂 reminder on event cards for birthdays ±7 days from event | `migrateSchemaToV135()` |
+| v1.35.1 | Grey out Can Drive toggle for non-Adult or non-JAG1 members; group select now triggers `updateRoleToggles()` | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
