@@ -132,6 +132,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.32.3 | Rename app to "JAG Portal" (title, header h1, PWA manifest name, Apps Script window title); fix iOS home screen icon: embed pre-generated PNG as static base64 data URI in `<link rel="apple-touch-icon">` (canvas-set href is too late for iOS Safari) | n/a |
 | v1.32.4 | Remove version number from Apps Script window title (`setTitle('JAG Portal')`) — version still shown in the page header sub-line | n/a |
 | v1.32.5 | Replace generated JAG icon with custom blue "J" PNG (3665957.png); embedded as static base64 data URI in `<link rel="apple-touch-icon">` | n/a |
+| v1.32.6 | Rename app to "JAG App" (title, header h1, PWA manifest name, apple-touch-icon title, Apps Script window title) | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
