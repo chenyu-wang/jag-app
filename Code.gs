@@ -1,10 +1,10 @@
 // ============================================================
 // JAG Life Group Roster - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.32.9 (2026-05-25)
+// Version: 1.33.0 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.32.9';
+const VERSION      = '1.33.0';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -142,9 +142,11 @@ function getMembers(ss) {
   const memberStartIdx = _normalizeStr(data[0][0]) === 'name' ? 1 : 2;
   const members = [];
 
+  const tz = Session.getScriptTimeZone();
   for (let i = memberStartIdx; i < data.length; i++) {
     const row = data[i];
     if (!row[0]) continue;
+    const rawUpdatedAt = row[9];
     members.push({
       rowIndex:      i + 1,
       name:          String(row[0]),
@@ -155,7 +157,8 @@ function getMembers(ss) {
       canReport:     row[5] === true,
       active:        row[6] === true,
       roleType:      String(row[7] || 'Adult'),
-      canDrive:      row[8] === true
+      canDrive:      row[8] === true,
+      updatedAt:     rawUpdatedAt ? Utilities.formatDate(new Date(rawUpdatedAt), tz, "yyyy-MM-dd'T'HH:mm:ss") : ''
     });
   }
 
@@ -302,6 +305,7 @@ function saveMember(member) {
     const sheet = ss.getSheetByName(MEMBERS_SHEET_NAME);
     if (!sheet) return { success: false, error: 'Members sheet not found' };
 
+    const updatedAt = new Date();
     const rowData = [
       member.name,
       member.group,
@@ -311,11 +315,12 @@ function saveMember(member) {
       member.canReport     === true,
       member.active        !== false,
       member.roleType      || 'Adult',
-      member.canDrive      === true
+      member.canDrive      === true,
+      updatedAt
     ];
 
     if (member.rowIndex) {
-      sheet.getRange(member.rowIndex, 1, 1, 9).setValues([rowData]);
+      sheet.getRange(member.rowIndex, 1, 1, 10).setValues([rowData]);
     } else {
       sheet.appendRow(rowData);
     }
@@ -348,13 +353,16 @@ function getLyrics(ss) {
   const data = sheet.getDataRange().getValues();
   // Row 1 is the header row; data starts at row 2 (index 1)
   const lyrics = [];
+  const tz = Session.getScriptTimeZone();
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (!row[0]) continue;
+    const rawUpdatedAt = row[2];
     lyrics.push({
       rowIndex:  i + 1,
       songName:  String(row[0] || ''),
-      copyCount: Number(row[1]) || 0
+      copyCount: Number(row[1]) || 0,
+      updatedAt: rawUpdatedAt ? Utilities.formatDate(new Date(rawUpdatedAt), tz, "yyyy-MM-dd'T'HH:mm:ss") : ''
     });
   }
   return lyrics;
@@ -366,10 +374,10 @@ function saveLyric(lyric) {
     const sheet = ss.getSheetByName(LYRICS_SHEET_NAME);
     if (!sheet) return { success: false, error: 'Lyrics sheet not found' };
 
-    const rowData = [lyric.songName, lyric.copyCount || 0];
+    const rowData = [lyric.songName, lyric.copyCount || 0, new Date()];
 
     if (lyric.rowIndex) {
-      sheet.getRange(lyric.rowIndex, 1, 1, 2).setValues([rowData]);
+      sheet.getRange(lyric.rowIndex, 1, 1, 3).setValues([rowData]);
       _clearDataCache();
       return { success: true, rowIndex: lyric.rowIndex };
     } else {
@@ -392,6 +400,34 @@ function deleteLyric(rowIndex) {
   } catch (e) {
     return { success: false, error: e.toString() };
   }
+}
+
+// ---- Migrations ----
+
+// Adds "Last Updated" column to Members (col J) and Lyrics (col C).
+// Idempotent — safe to re-run.
+function migrateSchemaToV133() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  const mSheet = ss.getSheetByName(MEMBERS_SHEET_NAME);
+  if (mSheet) {
+    const mData    = mSheet.getDataRange().getValues();
+    const hIdx     = _normalizeStr(String(mData[0][0])) === 'name' ? 0 : 1;
+    if (_normalizeStr(String(mData[hIdx][9] || '')) !== 'lastupdated') {
+      mSheet.getRange(hIdx + 1, 10).setValue('Last Updated');
+    }
+  }
+
+  const lSheet = ss.getSheetByName(LYRICS_SHEET_NAME);
+  if (lSheet) {
+    const lData = lSheet.getDataRange().getValues();
+    if (_normalizeStr(String(lData[0][2] || '')) !== 'lastupdated') {
+      lSheet.getRange(1, 3).setValue('Last Updated');
+    }
+  }
+
+  _clearDataCache();
+  return 'Migration v1.33 complete';
 }
 
 // ---- Helpers ----

@@ -136,6 +136,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.32.7 | Update `PORTAL_NOTICE` to say "JAG App" and new TinyURL `https://tinyurl.com/JAG-App`; update CLAUDE.md heading | n/a |
 | v1.32.8 | Fix event time display: read time using script timezone (not UTC) so Perth 18:30 reads back as 18:30; set time cell to plain text format before each save to prevent Sheets auto-converting string to Date | n/a |
 | v1.32.9 | Fix Separated LG attendee panel and share message excluding `group=Both` members (e.g. Steph); use `groupMatch` instead of exact `m.group === grp` filter in both places | n/a |
+| v1.33.0 | Add Last Updated timestamp to Members (col J) and Lyrics (col C); shown on member and lyric cards | `migrateSchemaToV133()` |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
@@ -156,7 +157,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | L | Notes | notes | Special events: `Label: Value\n...` per line |
 | M | Last Updated | updatedAt | Auto-stamped; do not edit |
 
-### Members tab schema (fixed, 9 columns)
+### Members tab schema (v1.33.0, 10 columns)
 | Col | Sheet Header | Notes |
 |-----|-------------|-------|
 | A | Name | |
@@ -168,16 +169,18 @@ Only required when adding a new column or renaming an existing header. Steps:
 | G | Active | Checkbox |
 | H | Role Type | Dropdown: Adult, Student, Older Sunday School, Harvest |
 | I | Can Drive | Checkbox; used to label members as "Drive" in group share messages |
+| J | Last Updated | Auto-stamped on every save; do not edit |
 
-- Members tab uses positional reads (row[0]–row[8]) — column order must not change
+- Members tab uses positional reads (row[0]–row[9]) — column order must not change
 - To add a Members column: add `migrateSchemaToVXY()` (see naming rule above) and update `getMembers()` + `saveMember()`
 
-### Lyrics tab schema (v1.30.0, 2 columns)
-> Row 1: column headers. Row 2+: data. Positional reads (row[0]–row[1]).
+### Lyrics tab schema (v1.33.0, 3 columns)
+> Row 1: column headers. Row 2+: data. Positional reads (row[0]–row[2]).
 | Col | Sheet Header | Notes |
 |-----|-------------|-------|
 | A | Song Name | Song title (string) |
 | B | Copy Count | Number of physical lyric sheet copies (number, default 0) |
+| C | Last Updated | Auto-stamped on every save; do not edit |
 
 - Lyrics are **lazy-loaded** via `getLyrics()` only when the user navigates to the Lyrics tab (`_lyricsLoaded` flag prevents repeated fetches)
 - CRUD: `getLyrics(ss)`, `saveLyric(lyric)`, `deleteLyric(rowIndex)` in Code.gs
