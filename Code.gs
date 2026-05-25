@@ -1,10 +1,10 @@
 // ============================================================
 // JAG Life Group Roster - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.32.7 (2026-05-25)
+// Version: 1.32.8 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.32.7';
+const VERSION      = '1.32.8';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -106,10 +106,10 @@ function getRosterEntries(ss) {
 
     const rawUpdatedAt = g(row, 'updatedAt');
     const rawTime      = g(row, 'time');
-    // Use 'UTC' (not script timezone) — Sheets stores time-only values as UTC fractions.
-    // Applying the local timezone shifts the time by +10/+11 hours, corrupting the value.
+    // Sheets stores time-only values as fractions of a day in the script's local timezone.
+    // Format using the script timezone so 18:30 Perth reads back as 18:30, not 10:30.
     const timeStr      = rawTime instanceof Date
-                         ? Utilities.formatDate(rawTime, 'UTC', 'HH:mm')
+                         ? Utilities.formatDate(rawTime, tz, 'HH:mm')
                          : String(rawTime || '');
     entries.push({
       rowIndex:    i + 1,
@@ -204,11 +204,10 @@ function saveRosterEntry(entry) {
     s('updatedAt',   new Date());
     s('time',        entry.time        || '');
 
-    if (entry.rowIndex) {
-      sheet.getRange(entry.rowIndex, 1, 1, numCols).setValues([rowData]);
-    } else {
-      sheet.appendRow(rowData);
-    }
+    // Set time cell to plain text before writing so Sheets never auto-converts '18:30' to a Date.
+    const targetRow = entry.rowIndex || (sheet.getLastRow() + 1);
+    if (col.time !== undefined) sheet.getRange(targetRow, col.time + 1).setNumberFormat('@');
+    sheet.getRange(targetRow, 1, 1, numCols).setValues([rowData]);
 
     SpreadsheetApp.flush(); // commit writes before sort so getLastColumn() sees col M
     _clearDataCache();
@@ -245,6 +244,7 @@ function saveRosterEntries(entries) {
       return _dateChanged(new Date(oldCell), newDate);
     });
 
+    let nextNewRow = sheet.getLastRow() + 1;
     entries.forEach(function(entry) {
       const dateObj = _parseDate(entry.date);
       const rowData = new Array(numCols).fill('');
@@ -263,11 +263,11 @@ function saveRosterEntries(entries) {
       s('updatedAt',   new Date());
       s('time',        entry.time        || '');
 
-      if (entry.rowIndex) {
-        sheet.getRange(entry.rowIndex, 1, 1, numCols).setValues([rowData]);
-      } else {
-        sheet.appendRow(rowData);
-      }
+      // Set time cell to plain text before writing so Sheets never auto-converts '18:30' to a Date.
+      const targetRow = entry.rowIndex || nextNewRow;
+      if (!entry.rowIndex) nextNewRow++;
+      if (col.time !== undefined) sheet.getRange(targetRow, col.time + 1).setNumberFormat('@');
+      sheet.getRange(targetRow, 1, 1, numCols).setValues([rowData]);
     });
 
     SpreadsheetApp.flush(); // commit writes before sort so getLastColumn() sees col M
