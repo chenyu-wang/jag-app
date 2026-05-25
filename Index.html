@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.42.1 (2026-05-25) -->
+  <!-- Version: 1.42.2 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1588,8 +1588,12 @@ function getActive() {
 }
 
 function _historicalValues(field) {
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - 1);
+  const cutoffISO = toISODate(cutoff);
   const freq = {};
   allEntries.forEach(function(e) {
+    if (e.date < cutoffISO) return;
     const v = e[field];
     if (v) freq[v] = (freq[v] || 0) + 1;
   });
