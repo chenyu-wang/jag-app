@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.35.2 (2026-05-25) -->
+  <!-- Version: 1.36.0 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -460,14 +460,14 @@ function timeAgo(isoStr) {
   if (h < 24) return h + 'h ago';
   const d = Math.floor(h / 24);
   if (d < 7)  return d + 'd ago';
-  return new Date(isoStr).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+  return new Date(isoStr).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Perth' });
 }
 
 function formatUpdatedAt(isoStr) {
   if (!isoStr) return '';
   const d = new Date(isoStr);
-  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
-    + ', ' + d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Australia/Perth' })
+    + ', ' + d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Australia/Perth' });
 }
 
 // =============================================
@@ -1336,7 +1336,7 @@ function openMemberForm(member) {
       </div>
       <div>
         <label>Birthday (optional)</label>
-        <input type="date" id="m-birthday" value="${_esc(m.birthday || '')}" style="background:#fff;color:#1e293b;" />
+        <div style="display:flex;align-items:center;">${_bdaySelects(m.birthday || '')}</div>
       </div>
     </div>
 
@@ -1364,7 +1364,11 @@ function submitMember() {
     canReport:    !noRole && document.getElementById('mt-report').classList.contains('on'),
     canDrive:     document.getElementById('mt-drive').classList.contains('on'),
     active:       document.getElementById('m-active').value === 'true',
-    birthday:     document.getElementById('m-birthday').value || '',
+    birthday:     (function() {
+                    const mo = (document.getElementById('m-bday-month') || {}).value || '';
+                    const dy = (document.getElementById('m-bday-day')   || {}).value || '';
+                    return (mo && dy) ? mo + '-' + dy : '';
+                  })(),
     updatedAt:    new Date().toISOString()
   };
 
@@ -1502,8 +1506,31 @@ function getEligibleFacilitators(group) {
 // =============================================
 function formatBirthday(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Perth' });
+  const parts = dateStr.split('-');
+  if (parts.length < 2) return '';
+  // "MM-DD" → parts[0]=month, parts[1]=day; "YYYY-MM-DD" → parts[1]=month, parts[2]=day
+  const month = parseInt(parts.length === 3 ? parts[1] : parts[0], 10) - 1;
+  const day   = parseInt(parts.length === 3 ? parts[2] : parts[1], 10);
+  if (isNaN(month) || isNaN(day)) return '';
+  return new Date(2000, month, day).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+}
+
+// Generates month + day <select> elements for the birthday field.
+function _bdaySelects(birthday) {
+  const parts = (birthday || '').split('-');
+  const curM = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[0] : '');
+  const curD = parts.length === 3 ? parts[2] : (parts.length === 2 ? parts[1] : '');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const mOpts = '<option value="">Month</option>' + months.map(function(mn, i) {
+    const v = String(i + 1).padStart(2, '0');
+    return '<option value="' + v + '"' + (curM === v ? ' selected' : '') + '>' + mn + '</option>';
+  }).join('');
+  const dOpts = '<option value="">Day</option>' + Array.from({length: 31}, function(_, i) {
+    const v = String(i + 1).padStart(2, '0');
+    return '<option value="' + v + '"' + (curD === v ? ' selected' : '') + '>' + (i + 1) + '</option>';
+  }).join('');
+  return '<select id="m-bday-month" style="background:#fff;color:#1e293b;">' + mOpts + '</select>'
+       + '<select id="m-bday-day"   style="background:#fff;color:#1e293b;margin-left:6px;">' + dOpts + '</select>';
 }
 
 // Returns active members whose birthday (month+day) falls within ±7 days of the given date ISO string.
@@ -1513,9 +1540,12 @@ function _birthdaysNearDate(fridayISO) {
   return allMembers.filter(function(m) {
     if (!m.birthday || !m.active) return false;
     const yr = friday.getFullYear();
-    const bd = new Date(m.birthday + 'T00:00:00');
+    const parts = m.birthday.split('-');
+    const month = parseInt(parts.length === 3 ? parts[1] : parts[0], 10) - 1;
+    const day   = parseInt(parts.length === 3 ? parts[2] : parts[1], 10);
+    if (isNaN(month) || isNaN(day)) return false;
     return [-1, 0, 1].some(function(dy) {
-      const candidate = new Date(yr + dy, bd.getMonth(), bd.getDate());
+      const candidate = new Date(yr + dy, month, day);
       return Math.abs(candidate.getTime() - friday.getTime()) <= WINDOW;
     });
   });
@@ -1640,7 +1670,7 @@ function toISODate(d) {
 }
 
 function formatDateLong(d) {
-  return d.toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+  return d.toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'short', year:'numeric', timeZone: 'Australia/Perth' });
 }
 
 // "Friday, 27 March 2026" — used in share messages

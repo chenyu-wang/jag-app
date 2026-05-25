@@ -1,17 +1,17 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.35.2 (2026-05-25)
+// Version: 1.36.0 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.35.2';
+const VERSION      = '1.36.0';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
-const ROSTER_SHEET_NAME = 'Schedule';
+const SCHEDULE_SHEET_NAME = 'Schedule';
 const MEMBERS_SHEET_NAME = 'Members';
 const LYRICS_SHEET_NAME  = 'Lyrics';
-const PORTAL_NOTICE      = '⚠️  Please use the JAG App to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/JAG-App';
+const APP_NOTICE      = '⚠️  Please use the JAG App to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/JAG-App';
 
 // ---- Entry Point ----
 
@@ -87,7 +87,7 @@ function _rosterColMap(headers) {
 }
 
 function getRosterEntries(ss) {
-  const sheet = (ss || SpreadsheetApp.openById(SPREADSHEET_ID)).getSheetByName(ROSTER_SHEET_NAME);
+  const sheet = (ss || SpreadsheetApp.openById(SPREADSHEET_ID)).getSheetByName(SCHEDULE_SHEET_NAME);
   if (!sheet || sheet.getLastRow() <= 1) return [];
 
   const data = sheet.getDataRange().getValues();
@@ -160,9 +160,14 @@ function getMembers(ss) {
       roleType:      String(row[7] || 'Adult'),
       canDrive:      row[8] === true,
       updatedAt:     rawUpdatedAt ? Utilities.formatDate(new Date(rawUpdatedAt), tz, "yyyy-MM-dd'T'HH:mm:ss") : '',
-      birthday:      rawBirthday instanceof Date
-                       ? Utilities.formatDate(rawBirthday, tz, 'yyyy-MM-dd')
-                       : String(rawBirthday || '')
+      birthday:      (function() {
+                       if (!rawBirthday) return '';
+                       if (rawBirthday instanceof Date) return Utilities.formatDate(rawBirthday, tz, 'MM-dd');
+                       const s = String(rawBirthday);
+                       // Normalize legacy "YYYY-MM-DD" → "MM-DD"
+                       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(5);
+                       return s;
+                     })()
     });
   }
 
@@ -174,7 +179,7 @@ function getMembers(ss) {
 function saveRosterEntry(entry) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(ROSTER_SHEET_NAME);
+    const sheet = ss.getSheetByName(SCHEDULE_SHEET_NAME);
     if (!sheet) return { success: false, error: 'Roster sheet not found' };
 
     const dateObj = _parseDate(entry.date);
@@ -233,7 +238,7 @@ function saveRosterEntry(entry) {
 function saveRosterEntries(entries) {
   try {
     const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(ROSTER_SHEET_NAME);
+    const sheet = ss.getSheetByName(SCHEDULE_SHEET_NAME);
     if (!sheet) return { success: false, error: 'Roster sheet not found' };
 
     const data         = sheet.getDataRange().getValues();
@@ -292,7 +297,7 @@ function saveRosterEntries(entries) {
 function deleteRosterEntry(rowIndex) {
   try {
     SpreadsheetApp.openById(SPREADSHEET_ID)
-      .getSheetByName(ROSTER_SHEET_NAME)
+      .getSheetByName(SCHEDULE_SHEET_NAME)
       .deleteRow(rowIndex);
     _clearDataCache();
     return { success: true };
@@ -582,8 +587,8 @@ function formatSheets() {
 }
 
 function _formatRosterSheet(ss) {
-  const sheet = ss.getSheetByName(ROSTER_SHEET_NAME);
-  if (!sheet) { Logger.log(ROSTER_SHEET_NAME + ' sheet not found.'); return; }
+  const sheet = ss.getSheetByName(SCHEDULE_SHEET_NAME);
+  if (!sheet) { Logger.log(SCHEDULE_SHEET_NAME + ' sheet not found.'); return; }
 
   // Auto-detect layout: if row 1 has no recognized column headers, it's the notice row (post-migration)
   const row1vals     = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -662,7 +667,7 @@ function _formatRosterSheet(ss) {
   if (hasNoticeRow) {
     // Post-migration: notice spans data columns in row 1 (idempotent — safe to re-run)
     if (dataColCount > 0) {
-      _applyNoticeStyle(sheet.getRange(1, 1, 1, dataColCount).merge().setValue(PORTAL_NOTICE));
+      _applyNoticeStyle(sheet.getRange(1, 1, 1, dataColCount).merge().setValue(APP_NOTICE));
       sheet.setRowHeight(1, 48);
     }
   } else {
@@ -672,12 +677,12 @@ function _formatRosterSheet(ss) {
       sheet.getRange(1, dataColCount + 2, 1, maxCols - dataColCount - 1).clear();
     }
     const rNoticeCol = dataColCount + 2;
-    _applyNoticeStyle(sheet.getRange(1, rNoticeCol, 1, 4).merge().setValue(PORTAL_NOTICE));
+    _applyNoticeStyle(sheet.getRange(1, rNoticeCol, 1, 4).merge().setValue(APP_NOTICE));
     sheet.setColumnWidth(rNoticeCol, 320);
     sheet.setRowHeight(1, 48);
   }
 
-  Logger.log(ROSTER_SHEET_NAME + ' sheet formatted (' + dataColCount + ' data columns, ' + (hasNoticeRow ? 'post' : 'pre') + '-migration).');
+  Logger.log(SCHEDULE_SHEET_NAME + ' sheet formatted (' + dataColCount + ' data columns, ' + (hasNoticeRow ? 'post' : 'pre') + '-migration).');
 }
 
 function _formatMembersSheet(ss) {
@@ -740,7 +745,7 @@ function _formatMembersSheet(ss) {
   sheet.getRange(1, 1, 1, sheet.getMaxColumns()).breakApart();
   if (hasNoticeRow) {
     // Post-migration: notice spans data columns in row 1 (idempotent — safe to re-run)
-    _applyNoticeStyle(sheet.getRange(1, 1, 1, DATA_COL_COUNT).merge().setValue(PORTAL_NOTICE));
+    _applyNoticeStyle(sheet.getRange(1, 1, 1, DATA_COL_COUNT).merge().setValue(APP_NOTICE));
     sheet.setRowHeight(1, 48);
   } else {
     // Pre-migration: notice to the right of data; clear stale columns first (growing-column fix)
@@ -749,7 +754,7 @@ function _formatMembersSheet(ss) {
       sheet.getRange(1, DATA_COL_COUNT + 2, 1, mMaxCols - DATA_COL_COUNT - 1).clear();
     }
     const mNoticeCol = DATA_COL_COUNT + 2;
-    _applyNoticeStyle(sheet.getRange(1, mNoticeCol, 1, 4).merge().setValue(PORTAL_NOTICE));
+    _applyNoticeStyle(sheet.getRange(1, mNoticeCol, 1, 4).merge().setValue(APP_NOTICE));
     sheet.setColumnWidth(mNoticeCol, 320);
     sheet.setRowHeight(1, 48);
   }

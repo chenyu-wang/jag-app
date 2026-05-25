@@ -143,6 +143,8 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.35.0 | Add Birthday field to Members (col K, `YYYY-MM-DD`); birthday input in member form; shown on member card meta line; 🎂 reminder on event cards for birthdays ±7 days from event | `migrateSchemaToV135()` |
 | v1.35.1 | Grey out Can Drive toggle for non-Adult or non-JAG1 members; group select now triggers `updateRoleToggles()` | n/a |
 | v1.35.2 | Add `seedBirthdays()` one-time seeder — matches 24 members by first name and fills Birthday col K | `seedBirthdays()` ✓ delete after run |
+| v1.35.3 | Rename `ROSTER_SHEET_NAME` → `SCHEDULE_SHEET_NAME` and `PORTAL_NOTICE` → `APP_NOTICE` throughout Code.gs | n/a |
+| v1.36.0 | Birthday format changed to `MM-DD` (no year); `getMembers()` normalises legacy `YYYY-MM-DD` → `MM-DD`; birthday input replaced with Month+Day `<select>` pair (via `_bdaySelects()`); all `formatUpdatedAt`, relative-date fallback, and `formatDateLong` display calls fixed to `timeZone:'Australia/Perth'` | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
@@ -176,7 +178,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | H | Role Type | Dropdown: Adult, Student, Older Sunday School, Harvest |
 | I | Can Drive | Checkbox; used to label members as "Drive" in group share messages |
 | J | Last Updated | Auto-stamped on every save; do not edit |
-| K | Birthday | `YYYY-MM-DD` plain text; stored from `<input type="date">`; displayed as "25 May" in app |
+| K | Birthday | `MM-DD` plain text (e.g. `05-25`); entered via Month+Day selects in form; displayed as "25 May" in app; year stored by legacy seeds is normalised to `MM-DD` on read |
 
 - Members tab uses positional reads (row[0]–row[10]) — column order must not change
 - To add a Members column: add `migrateSchemaToVXY()` (see naming rule above) and update `getMembers()` + `saveMember()`
@@ -262,6 +264,7 @@ Run `formatSheets()` from the Apps Script editor any time to apply human-readabl
 - `_updateFab()` — shows/hides `#fab-add` and sets its title; visible on `home`, `members`, `lyrics` views; call it everywhere `currentView` changes: `showView`, `openEditEntries`, `openAddForDate`, `finishSave`, `renderView`
 - `fabAction()` — FAB click dispatcher: `home` → `showView('add')`, `members` → `openMemberForm(null)`, `lyrics` → `openLyricForm(null)`
 - `_historicalValues(field)` — returns unique non-empty values of `allEntries[field]` sorted by frequency (most-used first); used as picklist options for venue and food in `buildSelect` calls inside `rebuildSections`
+- `_bdaySelects(birthday)` — generates Month + Day `<select>` pair for birthday field in `openMemberForm`; birthday stored as `MM-DD`; pre-populates from existing value (handles both `MM-DD` and legacy `YYYY-MM-DD`)
 - Card footers: use `buildCardFooter(friday, entries, ts)` — do not duplicate the Share/Edit button HTML
 - Encoding entries for `onclick`: use `encodeEntries(obj)` — replaces `JSON.stringify(obj).split('"').join('&quot;')`
 
