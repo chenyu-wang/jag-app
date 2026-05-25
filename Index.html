@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.39.0 (2026-05-25) -->
+  <!-- Version: 1.40.0 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -26,9 +26,11 @@
     .nav-btn { flex: 1; border: none; background: none; padding: 12px 0 14px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #94a3b8; font-size: .65rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; transition: color .15s; }
     .nav-btn svg { width: 22px; height: 22px; }
     .nav-btn.active { color: #6366f1; }
-    .fab { position: fixed; bottom: 72px; right: 16px; width: 52px; height: 52px; border-radius: 50%; background: #6366f1; color: #fff; border: none; font-size: 1.6rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(99,102,241,.45); z-index: 99; transition: opacity .15s, transform .15s; }
+    .fab { position: fixed; bottom: 72px; right: 16px; width: 52px; height: 52px; border-radius: 50%; background: #6366f1; color: #fff; border: none; font-size: 1.75rem; line-height: 1; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(99,102,241,.45); z-index: 99; transition: opacity .15s, transform .15s; }
     .fab:active { transform: scale(.93); }
     .fab.hidden { opacity: 0; pointer-events: none; }
+    body.add-mode #bottom-nav { display: none; }
+    body.add-mode #content { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 
     /* ---- Cards ---- */
     .date-card { background: #fff; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); overflow: hidden; }
@@ -405,6 +407,7 @@ function buildCardFooter(friday, entries, ts, editLabel, shareLabel) {
 }
 
 function showView(view) {
+  if (view !== 'add') document.body.classList.remove('add-mode');
   currentView = view;
   setActiveNav(view);
   _updateFab();
@@ -715,11 +718,10 @@ function buildEventCard(friday, entries, isPast, isUpcoming) {
     if (eventType === 'Special') {
       card.appendChild(buildCardFooter(friday, entries, ts));
     } else {
-      // Youth Hour / Combined: rich share with name list
+      // Youth Hour / Combined: attendance modal + share
       const _combFooter = document.createElement('div');
       _combFooter.className = 'card-footer';
-      const _shareLabel = eventType === 'Youth Hour' ? '📤 Youth Hour + 👥' : '📤 Combined + 👥';
-      _combFooter.innerHTML = `<span class="card-ts">${ts ? 'Updated ' + formatUpdatedAt(ts) : ''}</span><button class="share-btn" onclick="shareCombinedWithNames(new Date('${toISODate(friday)}'), ${_combEnc})">` + _shareLabel + `</button><button class="edit-btn" onclick="openEditEntries(${_combEnc})">✏️ Edit</button>`;
+      _combFooter.innerHTML = `<span class="card-ts">${ts ? 'Updated ' + formatUpdatedAt(ts) : ''}</span><button class="share-btn" onclick="_openAttendanceModal(new Date('${toISODate(friday)}'), ${_combEnc})">👥 Attendance</button><button class="edit-btn" onclick="openEditEntries(${_combEnc})">✏️ Edit</button>`;
       card.appendChild(_combFooter);
     }
 
@@ -736,7 +738,7 @@ function buildEventCard(friday, entries, isPast, isUpcoming) {
         <div class="sep-group-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;">
           <span class="group-tag ${tag}">${_esc(entry.group)}</span>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="share-btn" onclick="shareGroupWithNames(new Date('${toISODate(friday)}'), ${encOne})">📤 ${_esc(entry.group)} + 👥</button>
+            <button class="share-btn" onclick="_openAttendanceModal(new Date('${toISODate(friday)}'), ${encOne})">👥 ${_esc(entry.group)}</button>
             <button class="edit-btn" onclick="openEditEntries(${encOne})">✏️ Edit ${_esc(entry.group)}</button>
           </div>
         </div>
@@ -779,6 +781,7 @@ function buildUnscheduledCard(friday, isUpcoming) {
 // Add / Edit View
 // =============================================
 function renderAdd(prefillDate) {
+  document.body.classList.add('add-mode');
   const c = document.getElementById('content');
   c.innerHTML = '';
 
@@ -1709,7 +1712,8 @@ function suggestEventType(date) {
     case 2:  return 'Separated LG';
     case 3:  return 'Combined';
     case 4:  return 'Separated LG';
-    default: return 'Special';
+    case 5:  return 'Combined';
+    default: return 'Separated LG';
   }
 }
 
@@ -1818,6 +1822,55 @@ function formatShareDate(d) {
 // =============================================
 // Attendance Cache
 // =============================================
+
+// Opens a modal with an editable attendee panel for the given event.
+// Entries should be the full entries array for Combined, or a single-group
+// entry array for Separated LG (so only that group's members appear).
+function _openAttendanceModal(friday, entries) {
+  const date      = toISODate(friday);
+  const eventType = entries[0].eventType;
+  const isComb    = isCombinedType(eventType);
+  const title     = isComb ? eventType : (entries[0].group + ' Attendance');
+
+  openModal('<div style="font-weight:700;font-size:.95rem;margin-bottom:12px;">👥 ' + _esc(title) + ' — ' + _esc(formatDateLong(friday)) + '</div><div id="_att-modal-body"></div>');
+
+  // Temporarily set editingEntries so buildAttendeePanel knows which groups to show
+  const savedEditingEntries = editingEntries;
+  editingEntries = entries;
+  const panel = buildAttendeePanel(date, eventType);
+  editingEntries = savedEditingEntries;
+
+  panel.open = true;
+  panel.style.marginBottom = '12px';
+  document.getElementById('_att-modal-body').appendChild(panel);
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'btn';
+  copyBtn.textContent = '📤 Copy for WhatsApp';
+  copyBtn.onclick = function() {
+    saveAttendanceFromForm(date, eventType);
+    const text = isComb
+      ? _buildCombinedShareText(friday, entries)
+      : _buildGroupShareText(friday, entries);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(function() { closeModal(); showToast('Copied to clipboard!'); })
+        .catch(function() { _fallbackCopy(text); closeModal(); });
+    } else {
+      _fallbackCopy(text); closeModal();
+    }
+  };
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn btn-secondary';
+  saveBtn.style.marginTop = '8px';
+  saveBtn.textContent = 'Save & Close';
+  saveBtn.onclick = function() { saveAttendanceFromForm(date, eventType); closeModal(); };
+
+  const body = document.getElementById('_att-modal-body');
+  body.appendChild(copyBtn);
+  body.appendChild(saveBtn);
+}
 
 // Returns members to use in the "+ 👥" share message for a given date.
 // Uses cached attendance when available; falls back to all active members.

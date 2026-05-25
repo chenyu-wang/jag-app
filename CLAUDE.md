@@ -160,6 +160,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.37.9 | Increase nav tab padding to 12px top / 14px bottom so tab text is not obscured by iOS home bar | n/a |
 | v1.38.0 | Birthday reminder window changed to ±7 days (last LG to next LG) | n/a |
 | v1.39.0 | Schedule entries limited to ±1 year from today; `getRosterEntries` returns `{list,hasMorePast,hasMoreFuture}`; new `loadMoreRosterEntries(direction,boundaryISO)` GAS function; Load Earlier / Load Later buttons appear when more entries exist outside the loaded window; `getFridaysRange` extended dynamically to cover all loaded entry dates | n/a |
+| v1.40.0 | Attendee saving: replace per-event share buttons with "👥 Attendance" button; opens a modal with editable attendance checkboxes and "📤 Copy for WhatsApp" + "Save & Close" buttons; attendance persists in session `attendanceCache`; fix FAB "+" vertical centering (`line-height:1`); fix Add Event form covering bottom nav bar (`body.add-mode` hides nav); fix `suggestEventType` — week 5 now suggests Combined instead of Special | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
