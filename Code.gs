@@ -1,17 +1,17 @@
 // ============================================================
 // JAG Life Group Roster - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.32.6 (2026-05-25)
+// Version: 1.32.7 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.32.6';
+const VERSION      = '1.32.7';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
 const ROSTER_SHEET_NAME = 'Roster';   // year-agnostic — supports 2026 and beyond
 const MEMBERS_SHEET_NAME = 'Members';
 const LYRICS_SHEET_NAME  = 'Lyrics';
-const PORTAL_NOTICE      = '⚠️  Please use the JAG Roster Portal to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/jagrosterportal';
+const PORTAL_NOTICE      = '⚠️  Please use the JAG App to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/JAG-App';
 
 // ---- Entry Point ----
 

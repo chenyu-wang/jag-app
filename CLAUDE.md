@@ -1,4 +1,4 @@
-# JAG Life Group Roster Portal — Development Guide
+# JAG App — Development Guide
 
 ## Project Overview
 Google Apps Script web app for JAG Life Group scheduling at Aflame Church.
@@ -133,6 +133,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.32.4 | Remove version number from Apps Script window title (`setTitle('JAG Portal')`) — version still shown in the page header sub-line | n/a |
 | v1.32.5 | Replace generated JAG icon with custom blue "J" PNG (3665957.png); embedded as static base64 data URI in `<link rel="apple-touch-icon">` | n/a |
 | v1.32.6 | Rename app to "JAG App" (title, header h1, PWA manifest name, apple-touch-icon title, Apps Script window title) | n/a |
+| v1.32.7 | Update `PORTAL_NOTICE` to say "JAG App" and new TinyURL `https://tinyurl.com/JAG-App`; update CLAUDE.md heading | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
