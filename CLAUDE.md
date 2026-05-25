@@ -148,6 +148,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.36.1 | Add `migrateSchemaToV136()` to strip legacy `YYYY-MM-DD` birthday cells in sheet to `MM-DD` | `migrateSchemaToV136()` ✓ deleted |
 | v1.36.2 | Remove all one-off migration and seeder functions (`migrateSchemaToV133–136`, `seedBirthdays`) — all confirmed run | n/a |
 | v1.36.3 | Fix iOS home screen icon: replace `data:` URI (unsupported by iOS) with jsDelivr CDN URL pointing to `icon.png` committed to repo; simplify PWA manifest IIFE | n/a |
+| v1.37.0 | Birthday form adds optional Year field (stored as `YYYY-MM-DD` when year given, `MM-DD` when not); `formatBirthday` shows year only when present; add `migrateSchemaToV137()` to backfill missing Last Updated with 2026-01-01 | `migrateSchemaToV137()` ✓ delete after run |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
@@ -181,7 +182,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | H | Role Type | Dropdown: Adult, Student, Older Sunday School, Harvest |
 | I | Can Drive | Checkbox; used to label members as "Drive" in group share messages |
 | J | Last Updated | Auto-stamped on every save; do not edit |
-| K | Birthday | `MM-DD` plain text (e.g. `05-25`); entered via Month+Day selects in form; displayed as "25 May" in app; year stored by legacy seeds is normalised to `MM-DD` on read |
+| K | Birthday | `MM-DD` or `YYYY-MM-DD` plain text; Month+Day selects + optional Year input in form; displayed as "25 May" or "25 May 2001" depending on whether year was entered |
 
 - Members tab uses positional reads (row[0]–row[10]) — column order must not change
 - To add a Members column: add `migrateSchemaToVXY()` (see naming rule above) and update `getMembers()` + `saveMember()`

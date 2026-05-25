@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.36.3 (2026-05-25)
+// Version: 1.37.0 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.36.3';
+const VERSION      = '1.37.0';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -160,14 +160,9 @@ function getMembers(ss) {
       roleType:      String(row[7] || 'Adult'),
       canDrive:      row[8] === true,
       updatedAt:     rawUpdatedAt ? Utilities.formatDate(new Date(rawUpdatedAt), tz, "yyyy-MM-dd'T'HH:mm:ss") : '',
-      birthday:      (function() {
-                       if (!rawBirthday) return '';
-                       if (rawBirthday instanceof Date) return Utilities.formatDate(rawBirthday, tz, 'MM-dd');
-                       const s = String(rawBirthday);
-                       // Normalize legacy "YYYY-MM-DD" → "MM-DD"
-                       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(5);
-                       return s;
-                     })()
+      birthday:      rawBirthday instanceof Date
+                       ? Utilities.formatDate(rawBirthday, tz, 'yyyy-MM-dd')
+                       : String(rawBirthday || '')
     });
   }
 
@@ -409,6 +404,38 @@ function deleteLyric(rowIndex) {
   } catch (e) {
     return { success: false, error: e.toString() };
   }
+}
+
+// ---- One-time migrations ----
+
+// Sets Last Updated = 1 Jan 2026 for Members and Lyrics rows that have no timestamp.
+// Run once from the editor, then delete.
+function migrateSchemaToV137() {
+  const ss      = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const DEFAULT = new Date('2026-01-01T00:00:00');
+  let updated   = 0;
+
+  const mSheet = ss.getSheetByName(MEMBERS_SHEET_NAME);
+  if (mSheet) {
+    const data     = mSheet.getDataRange().getValues();
+    const startIdx = _normalizeStr(String(data[0][0])) === 'name' ? 1 : 2;
+    for (let i = startIdx; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      if (!data[i][9]) { mSheet.getRange(i + 1, 10).setValue(DEFAULT); updated++; }
+    }
+  }
+
+  const lSheet = ss.getSheetByName(LYRICS_SHEET_NAME);
+  if (lSheet) {
+    const data = lSheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      if (!data[i][2]) { lSheet.getRange(i + 1, 3).setValue(DEFAULT); updated++; }
+    }
+  }
+
+  _clearDataCache();
+  return 'migrateSchemaToV137: ' + updated + ' rows stamped with 2026-01-01';
 }
 
 // ---- Helpers ----

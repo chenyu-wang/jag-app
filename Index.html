@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.36.3 (2026-05-25) -->
+  <!-- Version: 1.37.0 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1367,7 +1367,9 @@ function submitMember() {
     birthday:     (function() {
                     const mo = (document.getElementById('m-bday-month') || {}).value || '';
                     const dy = (document.getElementById('m-bday-day')   || {}).value || '';
-                    return (mo && dy) ? mo + '-' + dy : '';
+                    const yr = ((document.getElementById('m-bday-year') || {}).value || '').trim();
+                    if (!mo || !dy) return '';
+                    return (yr && /^\d{4}$/.test(yr)) ? yr + '-' + mo + '-' + dy : mo + '-' + dy;
                   })(),
     updatedAt:    new Date().toISOString()
   };
@@ -1508,18 +1510,22 @@ function formatBirthday(dateStr) {
   if (!dateStr) return '';
   const parts = dateStr.split('-');
   if (parts.length < 2) return '';
-  // "MM-DD" → parts[0]=month, parts[1]=day; "YYYY-MM-DD" → parts[1]=month, parts[2]=day
-  const month = parseInt(parts.length === 3 ? parts[1] : parts[0], 10) - 1;
-  const day   = parseInt(parts.length === 3 ? parts[2] : parts[1], 10);
+  const hasYear = parts.length === 3;
+  const month = parseInt(hasYear ? parts[1] : parts[0], 10) - 1;
+  const day   = parseInt(hasYear ? parts[2] : parts[1], 10);
   if (isNaN(month) || isNaN(day)) return '';
-  return new Date(2000, month, day).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+  const yr   = hasYear ? parseInt(parts[0], 10) : 2000;
+  const opts = hasYear ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' };
+  return new Date(yr, month, day).toLocaleDateString('en-AU', opts);
 }
 
-// Generates month + day <select> elements for the birthday field.
+// Generates month + day + optional year inputs for the birthday field.
 function _bdaySelects(birthday) {
   const parts = (birthday || '').split('-');
-  const curM = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[0] : '');
-  const curD = parts.length === 3 ? parts[2] : (parts.length === 2 ? parts[1] : '');
+  const hasYear = parts.length === 3;
+  const curY = hasYear ? parts[0] : '';
+  const curM = hasYear ? parts[1] : (parts.length === 2 ? parts[0] : '');
+  const curD = hasYear ? parts[2] : (parts.length === 2 ? parts[1] : '');
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const mOpts = '<option value="">Month</option>' + months.map(function(mn, i) {
     const v = String(i + 1).padStart(2, '0');
@@ -1530,7 +1536,8 @@ function _bdaySelects(birthday) {
     return '<option value="' + v + '"' + (curD === v ? ' selected' : '') + '>' + (i + 1) + '</option>';
   }).join('');
   return '<select id="m-bday-month" style="background:#fff;color:#1e293b;">' + mOpts + '</select>'
-       + '<select id="m-bday-day"   style="background:#fff;color:#1e293b;margin-left:6px;">' + dOpts + '</select>';
+       + '<select id="m-bday-day" style="background:#fff;color:#1e293b;margin-left:6px;">' + dOpts + '</select>'
+       + '<input type="number" id="m-bday-year" min="1900" max="2099" placeholder="Year" value="' + curY + '" style="width:72px;background:#fff;color:#1e293b;margin-left:6px;" />';
 }
 
 // Returns active members whose birthday (month+day) falls within ±7 days of the given date ISO string.
