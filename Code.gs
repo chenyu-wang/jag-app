@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.42.2 (2026-05-25)
+// Version: 1.42.3 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.42.2';
+const VERSION      = '1.42.3';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -115,16 +115,44 @@ function _rosterColMap(headers) {
   return m;
 }
 
+// ---- Timezone helpers (pure-JS, avoids per-row Utilities.formatDate calls) ----
+// Computes script TZ offset in ms via a single Utilities.formatDate call at epoch.
+// Safe for fixed-offset zones (e.g. Australia/Perth UTC+8, no DST).
+function _scriptTzOffsetMs(tz) {
+  const ref = Utilities.formatDate(new Date(0), tz, 'yyyy-MM-dd HH:mm:ss');
+  const p = ref.split(/[- :]/);
+  return Date.UTC(+p[0], +p[1] - 1, +p[2], +p[3], +p[4], +p[5]);
+}
+function _fmtDateISO(d, offMs) {
+  const s = new Date(d.getTime() + offMs);
+  return s.getUTCFullYear() + '-' +
+    String(s.getUTCMonth() + 1).padStart(2, '0') + '-' +
+    String(s.getUTCDate()).padStart(2, '0');
+}
+function _fmtTimeHHMM(d, offMs) {
+  const s = new Date(d.getTime() + offMs);
+  return String(s.getUTCHours()).padStart(2, '0') + ':' + String(s.getUTCMinutes()).padStart(2, '0');
+}
+function _fmtDateTimeISO(d, offMs) {
+  const s = new Date(d.getTime() + offMs);
+  return s.getUTCFullYear() + '-' +
+    String(s.getUTCMonth() + 1).padStart(2, '0') + '-' +
+    String(s.getUTCDate()).padStart(2, '0') + 'T' +
+    String(s.getUTCHours()).padStart(2, '0') + ':' +
+    String(s.getUTCMinutes()).padStart(2, '0') + ':' +
+    String(s.getUTCSeconds()).padStart(2, '0');
+}
+
 // startISO / endISO: 'yyyy-MM-dd' window (inclusive). Defaults to ±1 year from today.
 // Returns {list, hasMorePast, hasMoreFuture}.
 function getRosterEntries(ss, startISO, endISO) {
-  const tz = Session.getScriptTimeZone();
+  const tzOff = _scriptTzOffsetMs(Session.getScriptTimeZone());
   if (!startISO || !endISO) {
     const now = new Date();
     const s = new Date(now); s.setFullYear(s.getFullYear() - 1);
     const e = new Date(now); e.setFullYear(e.getFullYear() + 1);
-    if (!startISO) startISO = Utilities.formatDate(s, tz, 'yyyy-MM-dd');
-    if (!endISO)   endISO   = Utilities.formatDate(e, tz, 'yyyy-MM-dd');
+    if (!startISO) startISO = _fmtDateISO(s, tzOff);
+    if (!endISO)   endISO   = _fmtDateISO(e, tzOff);
   }
 
   const sheet = (ss || SpreadsheetApp.openById(SPREADSHEET_ID)).getSheetByName(SCHEDULE_SHEET_NAME);
@@ -143,8 +171,7 @@ function getRosterEntries(ss, startISO, endISO) {
   for (let i = headerRowIdx + 1; i < data.length; i++) {
     const row = data[i];
     if (!g(row, 'date')) continue;
-    const dateObj = new Date(g(row, 'date'));
-    const dateISO = Utilities.formatDate(dateObj, tz, 'yyyy-MM-dd');
+    const dateISO = _fmtDateISO(new Date(g(row, 'date')), tzOff);
 
     if (dateISO < startISO) { hasMorePast   = true; continue; }
     if (dateISO > endISO)   { hasMoreFuture = true; continue; }
@@ -152,9 +179,9 @@ function getRosterEntries(ss, startISO, endISO) {
     const rawUpdatedAt = g(row, 'updatedAt');
     const rawTime      = g(row, 'time');
     // Sheets stores time-only values as fractions of a day in the script's local timezone.
-    // Format using the script timezone so 18:30 Perth reads back as 18:30, not 10:30.
+    // Shift by the same tzOff so 18:30 Perth reads back as 18:30, not 10:30.
     const timeStr      = rawTime instanceof Date
-                         ? Utilities.formatDate(rawTime, tz, 'HH:mm')
+                         ? _fmtTimeHHMM(rawTime, tzOff)
                          : String(rawTime || '');
     list.push({
       rowIndex:    i + 1,
@@ -169,7 +196,7 @@ function getRosterEntries(ss, startISO, endISO) {
       reporting:   String(g(row, 'reporting')   || ''),
       notes:       String(g(row, 'notes')       || ''),
       iceBreaker:  String(g(row, 'iceBreaker')  || ''),
-      updatedAt:   rawUpdatedAt ? Utilities.formatDate(new Date(rawUpdatedAt), tz, "yyyy-MM-dd'T'HH:mm:ss") : '',
+      updatedAt:   rawUpdatedAt ? _fmtDateTimeISO(new Date(rawUpdatedAt), tzOff) : '',
       time:        timeStr
     });
   }

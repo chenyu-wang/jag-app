@@ -165,6 +165,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.42.0 | Bug fix: Drive toggle now enabled for all Adults (any group) and JAG1 Students; was incorrectly restricted to JAG1 Adults only. Input validation: maxlength on all text inputs (name 60, song 100, notes 200, special-field label 50, special-field value 150); lyric copies changed to `type="number" min=0 max=999`; submitLyric rejects count > 999 | n/a |
 | v1.42.1 | Scheduling form field limits: `buildSelect` gains optional `maxlength` param; venue/food 100, all person fields (organiser, P&W, facilitator, reporting, ice breaker) 60 — applied to Special, Combined, Youth Hour, and Separated LG forms | n/a |
 | v1.42.2 | `_historicalValues()` now only considers entries from the last 1 year — keeps dropdown suggestions recent and relevant | n/a |
+| v1.42.3 | Performance: replace per-row `Utilities.formatDate()` calls in `getRosterEntries()` with pure-JS helpers (`_scriptTzOffsetMs`, `_fmtDateISO`, `_fmtTimeHHMM`, `_fmtDateTimeISO`); reduces ~600 GAS service calls to 1 per invocation | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
