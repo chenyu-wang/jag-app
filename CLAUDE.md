@@ -167,6 +167,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.42.2 | `_historicalValues()` now only considers entries from the last 1 year — keeps dropdown suggestions recent and relevant | n/a |
 | v1.42.3 | Performance: replace per-row `Utilities.formatDate()` calls in `getRosterEntries()` with pure-JS helpers (`_scriptTzOffsetMs`, `_fmtDateISO`, `_fmtTimeHHMM`, `_fmtDateTimeISO`); reduces ~600 GAS service calls to 1 per invocation | n/a |
 | v1.42.4 | Split `allData` cache into `allData_entries`, `allData_members`, `allData_lyrics` (3× capacity); selective invalidation — roster writes only evict entries, member writes only evict members, lyric writes only evict lyrics; `_clearDataCache()` still nukes all 3 (used by migration) | n/a |
+| v1.43.0 | New `Attendees` column in Schedule sheet (comma-separated names); attendees editable in the schedule edit form (per-group checklist for Separated LG, all members for Combined/Youth Hour); saved to sheet on submit; pre-loaded into attendanceCache on page load; share buttons on event cards now copy directly (no modal) using saved attendee data. Modal close ✕ button added to all modals. Schedule edit ✕ button in form header. Tab bar stays visible (dimmed) during edit. Lyric copies field unified with other input styling. | add `Attendees` column header to Schedule sheet |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.

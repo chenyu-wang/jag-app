@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.42.4 (2026-05-25)
+// Version: 1.43.0 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.42.4';
+const VERSION      = '1.43.0';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -123,6 +123,7 @@ function _rosterColMap(headers) {
       case 'ice breaker':      m.iceBreaker = i;  break;
       case 'last updated':     m.updatedAt = i;   break;
       case 'time':             m.time = i;        break;
+      case 'attendees':        m.attendees = i;   break;
     }
   });
   return m;
@@ -210,7 +211,8 @@ function getRosterEntries(ss, startISO, endISO) {
       notes:       String(g(row, 'notes')       || ''),
       iceBreaker:  String(g(row, 'iceBreaker')  || ''),
       updatedAt:   rawUpdatedAt ? _fmtDateTimeISO(new Date(rawUpdatedAt), tzOff) : '',
-      time:        timeStr
+      time:        timeStr,
+      attendees:   String(g(row, 'attendees')   || '')
     });
   }
 
@@ -295,6 +297,7 @@ function saveRosterEntry(entry) {
     s('iceBreaker',  entry.iceBreaker  || '');
     s('updatedAt',   new Date());
     s('time',        entry.time        || '');
+    s('attendees',   entry.attendees   || '');
 
     // Set time cell to plain text before writing so Sheets never auto-converts '18:30' to a Date.
     const targetRow = entry.rowIndex || (sheet.getLastRow() + 1);
@@ -354,6 +357,7 @@ function saveRosterEntries(entries) {
       s('iceBreaker',  entry.iceBreaker  || '');
       s('updatedAt',   new Date());
       s('time',        entry.time        || '');
+      s('attendees',   entry.attendees   || '');
 
       // Set time cell to plain text before writing so Sheets never auto-converts '18:30' to a Date.
       const targetRow = entry.rowIndex || nextNewRow;
