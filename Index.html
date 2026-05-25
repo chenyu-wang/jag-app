@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.42.0 (2026-05-25) -->
+  <!-- Version: 1.42.1 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -949,7 +949,7 @@ function rebuildSections(eventType) {
     div.innerHTML = `
       <div class="field">
         <label>🏡 Venue (optional)</label>
-        ${buildSelect('shared-venue', _historicalValues('venue'), ref.venue||'')}
+        ${buildSelect('shared-venue', _historicalValues('venue'), ref.venue||'', 100)}
       </div>
       <div class="field">
         <label>💬 Comments (optional)</label>
@@ -974,29 +974,29 @@ function rebuildSections(eventType) {
     div.innerHTML = `
       <div class="field">
         <label>🏡 Venue (Shared)</label>
-        ${buildSelect('shared-venue', _historicalValues('venue'), ref.venue||'')}
+        ${buildSelect('shared-venue', _historicalValues('venue'), ref.venue||'', 100)}
       </div>
       <div class="field">
         <label>Organiser (optional)</label>
-        ${buildSelect('shared-organiser', _historicalValues('organiser'), ref.organiser||'')}
+        ${buildSelect('shared-organiser', _historicalValues('organiser'), ref.organiser||'', 60)}
       </div>
       <div class="field">
         <label>🥘 Food (Shared)</label>
-        ${buildSelect('shared-food', _historicalValues('food'), ref.food||'')}
+        ${buildSelect('shared-food', _historicalValues('food'), ref.food||'', 100)}
       </div>
       <div class="field-row">
         <div class="field">
           <label>🎵 Praise &amp; Worship</label>
-          ${buildSelect('shared-pw', _historicalValues('pw'), ref.pw||'')}
+          ${buildSelect('shared-pw', _historicalValues('pw'), ref.pw||'', 60)}
         </div>
         <div class="field">
           <label>📖 Facilitator</label>
-          ${buildSelect('shared-facilitator', getEligibleFacilitators(null), ref.facilitator||'')}
+          ${buildSelect('shared-facilitator', getEligibleFacilitators(null), ref.facilitator||'', 60)}
         </div>
       </div>
       <div class="field">
         <label>✍️ Reporting</label>
-        ${buildSelect('shared-reporting', getEligible('reporting', null, true), ref.reporting||'')}
+        ${buildSelect('shared-reporting', getEligible('reporting', null, true), ref.reporting||'', 60)}
       </div>
       <div class="field">
         <label>Notes (optional)</label>
@@ -1005,7 +1005,7 @@ function rebuildSections(eventType) {
       ${eventType === 'Youth Hour' ? `
       <div class="field">
         <label>Ice Breaker (optional)</label>
-        ${buildSelect('shared-iceBreaker', getEligible('iceBreaker', null, true), ref.iceBreaker||'')}
+        ${buildSelect('shared-iceBreaker', getEligible('iceBreaker', null, true), ref.iceBreaker||'', 60)}
       </div>` : ''}
     `;
     container.appendChild(div);
@@ -1027,31 +1027,31 @@ function rebuildSections(eventType) {
       <div class="form-section-title ${titleClass}">${grp}</div>
       <div class="field">
         <label>🏡 Venue</label>
-        ${buildSelect(grp+'-venue', _historicalValues('venue'), entry.venue||'')}
+        ${buildSelect(grp+'-venue', _historicalValues('venue'), entry.venue||'', 100)}
       </div>
       <div class="field-row">
         <div class="field">
           <label>Organiser (optional)</label>
-          ${buildSelect(grp+'-organiser', _historicalValues('organiser'), entry.organiser||'')}
+          ${buildSelect(grp+'-organiser', _historicalValues('organiser'), entry.organiser||'', 60)}
         </div>
         <div class="field">
           <label>🥘 Food</label>
-          ${buildSelect(grp+'-food', _historicalValues('food'), entry.food||'')}
+          ${buildSelect(grp+'-food', _historicalValues('food'), entry.food||'', 100)}
         </div>
       </div>
       <div class="field-row">
         <div class="field">
           <label>🎵 Praise &amp; Worship</label>
-          ${buildSelect(grp+'-pw', _historicalValues('pw'), entry.pw||'')}
+          ${buildSelect(grp+'-pw', _historicalValues('pw'), entry.pw||'', 60)}
         </div>
         <div class="field">
           <label>📖 Facilitator</label>
-          ${buildSelect(grp+'-facilitator', getEligibleFacilitators(grp), entry.facilitator||'')}
+          ${buildSelect(grp+'-facilitator', getEligibleFacilitators(grp), entry.facilitator||'', 60)}
         </div>
       </div>
       <div class="field">
         <label>✍️ Reporting</label>
-        ${buildSelect(grp+'-reporting', getEligible('reporting', grp, false), entry.reporting||'')}
+        ${buildSelect(grp+'-reporting', getEligible('reporting', grp, false), entry.reporting||'', 60)}
       </div>
       <div class="field">
         <label>Notes (optional)</label>
@@ -1080,14 +1080,15 @@ function addSpecialField(label, value, container) {
   c.appendChild(row);
 }
 
-function buildSelect(id, options, selectedValue) {
+function buildSelect(id, options, selectedValue, maxlength) {
   const listId = 'ddl-' + id;
   const inputVal = selectedValue ? displayName(selectedValue) : '';
   const opts = options.map(n => {
     const dn = displayName(n);
     return `<div class="dd-opt" onmousedown="event.preventDefault();ddPick('${id}','${listId}',${encodeEntries(dn)})">${_esc(dn)}</div>`;
   }).join('');
-  return `<div class="dd-wrap"><input type="text" id="${id}" value="${_esc(inputVal)}" placeholder="Select or type..." autocomplete="off" style="background:#fff;color:#1e293b;" oninput="ddFilter('${id}','${listId}')" onfocus="ddOpen('${listId}')" onblur="setTimeout(()=>ddClose('${listId}'),150)" /><div id="${listId}" class="dd-list">${opts}</div></div>`;
+  const ml = maxlength ? ` maxlength="${maxlength}"` : '';
+  return `<div class="dd-wrap"><input type="text" id="${id}" value="${_esc(inputVal)}" placeholder="Select or type..." autocomplete="off" style="background:#fff;color:#1e293b;"${ml} oninput="ddFilter('${id}','${listId}')" onfocus="ddOpen('${listId}')" onblur="setTimeout(()=>ddClose('${listId}'),150)" /><div id="${listId}" class="dd-list">${opts}</div></div>`;
 }
 
 function ddOpen(listId) {
