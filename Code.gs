@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.35.1 (2026-05-25)
+// Version: 1.35.2 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.35.1';
+const VERSION      = '1.35.2';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -404,6 +404,66 @@ function deleteLyric(rowIndex) {
   } catch (e) {
     return { success: false, error: e.toString() };
   }
+}
+
+// ---- One-time seeders (delete after confirmed run) ----
+
+// Matches members by first name (case-insensitive) and fills Birthday col K.
+// Only writes to rows where Birthday is currently empty. Run once from the editor.
+function seedBirthdays() {
+  const BIRTHDAYS = {
+    'jordan':        '2000-01-11',
+    'bridie':        '2000-01-26',
+    'julia':         '2000-01-28',
+    'andrew':        '2000-02-22',
+    'isabella':      '2000-03-08',
+    'anna':          '2000-03-09',
+    'caleb':         '2000-03-14',
+    'james':         '2000-05-19',
+    'elizabeth':     '2000-05-22',
+    'arielle':       '2000-05-29',
+    'george':        '2000-06-08',
+    'justine':       '2000-07-11',
+    'tiffany':       '2000-07-12',
+    'cherry':        '2000-07-23',
+    'mia':           '2000-08-07',
+    'vianny':        '2000-08-26',
+    'luke johnstone':'2000-09-27',
+    'luke':          '2000-09-27',
+    'angel':         '2000-10-05',
+    'chenyu':        '2000-10-22',
+    'sonia':         '2000-11-24',
+    'preston':       '2000-11-29',
+    'jaden':         '2000-12-08',
+    'steph':         '2000-12-11',
+    'nathan':        '2000-12-13'
+  };
+
+  const ss     = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet  = ss.getSheetByName(MEMBERS_SHEET_NAME);
+  const data   = sheet.getDataRange().getValues();
+  const hIdx   = _normalizeStr(String(data[0][0])) === 'name' ? 0 : 1;
+  let updated  = 0, skipped = 0;
+
+  for (let i = hIdx + 1; i < data.length; i++) {
+    const fullName = String(data[i][0] || '').trim();
+    if (!fullName) continue;
+    const existing = String(data[i][10] || '').trim();
+    if (existing) { skipped++; continue; } // already has a birthday
+
+    // Try full name (lowercase), then first name only
+    const lowerFull  = fullName.toLowerCase();
+    const lowerFirst = lowerFull.split(' ')[0];
+    const bday = BIRTHDAYS[lowerFull] || BIRTHDAYS[lowerFirst];
+    if (!bday) continue;
+
+    sheet.getRange(i + 1, 11).setNumberFormat('@').setValue(bday);
+    updated++;
+    Logger.log('Set birthday for ' + fullName + ' → ' + bday);
+  }
+
+  _clearDataCache();
+  return 'seedBirthdays: ' + updated + ' updated, ' + skipped + ' already set, check Execution Log for details';
 }
 
 // ---- Migrations ----
