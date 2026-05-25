@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.40.0 (2026-05-25) -->
+  <!-- Version: 1.41.0 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -18,9 +18,17 @@
 
     /* ---- Layout ---- */
     #app { display: flex; flex-direction: column; height: 100vh; overflow-x: hidden; }
-    header { background: #6366f1; color: #fff; padding: 14px 16px 10px; flex-shrink: 0; }
+    header { background: #6366f1; color: #fff; padding: 14px 16px 10px; flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between; }
     header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: .3px; }
     header p  { font-size: .75rem; opacity: .8; margin-top: 2px; }
+    #about-btn { background: none; border: none; color: rgba(255,255,255,.75); cursor: pointer; padding: 2px; line-height: 1; flex-shrink: 0; margin-top: 2px; }
+    #about-btn:active { color: #fff; }
+    #install-banner-wrap { flex-shrink: 0; }
+    #install-banner { background: #ede9fe; border-bottom: 1px solid #c7d2fe; padding: 10px 14px; display: flex; align-items: flex-start; gap: 8px; }
+    .install-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+    .install-text { flex: 1; font-size: .8rem; line-height: 1.55; color: #3730a3; }
+    .install-text b { color: #312e81; }
+    .install-dismiss { background: none; border: none; color: #6366f1; font-size: 1rem; cursor: pointer; padding: 0; flex-shrink: 0; font-weight: 700; line-height: 1; margin-top: 1px; }
     #content  { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px 12px calc(100px + env(safe-area-inset-bottom)); }
     #bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e2e8f0; display: flex; z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
     .nav-btn { flex: 1; border: none; background: none; padding: 12px 0 14px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #94a3b8; font-size: .65rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; transition: color .15s; }
@@ -191,9 +199,16 @@
 <body>
 <div id="app">
   <header>
-    <h1>JAG App</h1>
-    <p id="header-sub">Loading...</p>
+    <div>
+      <h1>JAG App</h1>
+      <p id="header-sub">Loading...</p>
+    </div>
+    <button id="about-btn" onclick="openAbout()" title="About">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;display:block;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+    </button>
   </header>
+
+  <div id="install-banner-wrap"></div>
 
   <div id="content">
     <div class="loading" id="loading-msg">Loading roster...</div>
@@ -286,6 +301,7 @@ document.addEventListener('DOMContentLoaded', function() {
   } else {
     loadData(); // fallback: SSR data unavailable, fetch async
   }
+  _maybeShowInstallBanner();
   document.getElementById('content').addEventListener('scroll', function() {
     if (currentView !== 'home' || _dashBusy) return;
     const el = this;
@@ -2510,6 +2526,58 @@ function deleteLyricRow(rowIndex) {
 // =============================================
 // Modal
 // =============================================
+function openAbout() {
+  const ver = (document.getElementById('header-sub') || {}).textContent || '';
+  openModal(
+    '<div style="text-align:center;padding:6px 0 16px;">' +
+      '<div style="font-size:2.4rem;margin-bottom:6px;">✝️</div>' +
+      '<div style="font-weight:800;font-size:1.15rem;letter-spacing:.3px;">JAG App</div>' +
+      (ver ? '<div style="font-size:.75rem;color:#64748b;margin-top:3px;">' + _esc(ver) + '</div>' : '') +
+    '</div>' +
+    '<div style="font-size:.875rem;color:#334155;line-height:1.65;text-align:center;margin-bottom:20px;">' +
+      '<b style="font-size:.95rem;">JESUS Aflame Generation</b><br>' +
+      'The young adults ministry of Aflame Church,<br>scheduling weekly Life Group gatherings for the JAG community.' +
+    '</div>' +
+    '<div style="background:#f8fafc;border-radius:10px;padding:14px 16px;margin-bottom:16px;">' +
+      '<div style="font-weight:700;font-size:.72rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;">📱 Add to Home Screen</div>' +
+      '<div style="font-size:.83rem;color:#1e293b;margin-bottom:10px;">' +
+        '<div style="font-weight:600;margin-bottom:3px;">iPhone / iPad (Safari)</div>' +
+        'Tap the <b>Share</b> button <span style="font-size:1em;">⬆️</span> at the bottom of Safari, then tap <b>"Add to Home Screen"</b> and confirm.' +
+      '</div>' +
+      '<div style="font-size:.83rem;color:#1e293b;">' +
+        '<div style="font-weight:600;margin-bottom:3px;">Android (Chrome)</div>' +
+        'Tap the <b>⋮ menu</b> at the top-right, then tap <b>"Add to Home Screen"</b> and confirm.' +
+      '</div>' +
+    '</div>' +
+    '<div style="text-align:center;font-size:.78rem;color:#94a3b8;">Contact Chenyu for issues or feedback.</div>'
+  );
+}
+
+function _maybeShowInstallBanner() {
+  const wrap = document.getElementById('install-banner-wrap');
+  if (!wrap || wrap.children.length) return;
+  try { if (localStorage.getItem('jag_install_dismissed')) return; } catch(e) { return; }
+  if (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) return;
+  const isIOS     = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isAndroid = /Android/.test(navigator.userAgent);
+  if (!isIOS && !isAndroid) return;
+  const step = isIOS
+    ? 'Tap <b>Share ⬆️</b> then <b>"Add to Home Screen"</b> to use JAG as an app.'
+    : 'Tap the <b>⋮ menu</b> then <b>"Add to Home Screen"</b> to use JAG as an app.';
+  wrap.innerHTML =
+    '<div id="install-banner">' +
+      '<span class="install-icon">📱</span>' +
+      '<span class="install-text">' + step + '</span>' +
+      '<button class="install-dismiss" onclick="_dismissInstallBanner()" title="Dismiss">✕</button>' +
+    '</div>';
+}
+
+function _dismissInstallBanner() {
+  try { localStorage.setItem('jag_install_dismissed', '1'); } catch(e) {}
+  const wrap = document.getElementById('install-banner-wrap');
+  if (wrap) wrap.innerHTML = '';
+}
+
 function openModal(html) {
   document.getElementById('modal-content').innerHTML = html;
   document.getElementById('modal-overlay').classList.add('open');
