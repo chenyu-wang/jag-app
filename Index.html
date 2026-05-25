@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.32.8 (2026-05-25) -->
+  <!-- Version: 1.32.9 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1676,7 +1676,7 @@ function buildAttendeePanel(date, eventType) {
     const roleOrder   = { 'Adult': 0, 'Student': 1, 'Harvest': 2 };
     grpsToShow.forEach(function(grp) {
       const members = allMembers
-        .filter(function(m) { return m.active && m.group === grp; })
+        .filter(function(m) { return m.active && groupMatch(m, grp); })
         .sort(function(a, b) { return ((roleOrder[a.roleType] ?? 1) - (roleOrder[b.roleType] ?? 1)) || a.name.localeCompare(b.name); });
       groups.push({ label: grp, members: members, cacheKey: date + ':' + grp, grpAttr: grp });
     });
@@ -1941,8 +1941,7 @@ function _buildGroupShareText(friday, entryOrArr) {
   const grp   = entry.group;
 
   const dateStr  = formatShareDate(friday);
-  // Separated LG: exact group match only — 'Both' members attend Combined/Youth Hour, not per-group LG
-  const members  = getActiveForShare(toISODate(friday), grp).filter(m => m.group === grp);
+  const members  = getActiveForShare(toISODate(friday), grp).filter(m => groupMatch(m, grp));
   const hostName = detectHost(entry.venue, members);
   const lines    = [];
 
