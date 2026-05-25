@@ -140,6 +140,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.33.1 | Update `_formatMembersSheet` to 10 cols + Last Updated datetime format; add `_formatLyricsSheet` with widths, banding, datetime format; wire into `formatSheets()` | n/a |
 | v1.34.0 | Rename "Roster" sheet tab to "Schedule" (`ROSTER_SHEET_NAME = 'Schedule'`); fix Lyrics header style (bold + `#ede9fe` bg); fix Members Last Updated checkbox (clearDataValidations); rename file header comment to "JAG App" | `migrateSchemaToV134()` |
 | v1.34.1 | Always show Last Updated line on member and lyric cards — display "—" for records not yet stamped instead of hiding the field | n/a |
+| v1.35.0 | Add Birthday field to Members (col K, `YYYY-MM-DD`); birthday input in member form; shown on member card meta line; 🎂 reminder on event cards for birthdays ±7 days from event | `migrateSchemaToV135()` |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
@@ -160,7 +161,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | L | Notes | notes | Special events: `Label: Value\n...` per line |
 | M | Last Updated | updatedAt | Auto-stamped; do not edit |
 
-### Members tab schema (v1.33.0, 10 columns)
+### Members tab schema (v1.35.0, 11 columns)
 | Col | Sheet Header | Notes |
 |-----|-------------|-------|
 | A | Name | |
@@ -173,8 +174,9 @@ Only required when adding a new column or renaming an existing header. Steps:
 | H | Role Type | Dropdown: Adult, Student, Older Sunday School, Harvest |
 | I | Can Drive | Checkbox; used to label members as "Drive" in group share messages |
 | J | Last Updated | Auto-stamped on every save; do not edit |
+| K | Birthday | `YYYY-MM-DD` plain text; stored from `<input type="date">`; displayed as "25 May" in app |
 
-- Members tab uses positional reads (row[0]–row[9]) — column order must not change
+- Members tab uses positional reads (row[0]–row[10]) — column order must not change
 - To add a Members column: add `migrateSchemaToVXY()` (see naming rule above) and update `getMembers()` + `saveMember()`
 
 ### Lyrics tab schema (v1.33.0, 3 columns)

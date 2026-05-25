@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.34.1 (2026-05-25) -->
+  <!-- Version: 1.35.0 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -578,6 +578,17 @@ function buildEventCard(friday, entries, isPast, isUpcoming) {
       <span class="event-badge ${eventTypeBadge(eventType)}">${_esc(eventType)}</span>
     </div>`;
   card.appendChild(hdr);
+
+  // ---- Birthday reminder (±7 days from event) ----
+  const _bdayMembers = _birthdaysNearDate(toISODate(friday));
+  if (_bdayMembers.length > 0) {
+    const bdiv = document.createElement('div');
+    bdiv.style.cssText = 'font-size:.75rem;color:#7c3aed;padding:4px 6px 6px;border-bottom:1px solid #ede9fe;';
+    bdiv.textContent = '🎂 ' + _bdayMembers.map(function(m) {
+      return displayName(m.name) + ' (' + formatBirthday(m.birthday) + ')';
+    }).join(' · ');
+    card.appendChild(bdiv);
+  }
 
   // ---- Cancelled / Replaced ----
   if (isCancelledOrReplaced) {
@@ -1262,7 +1273,7 @@ function buildMemberCard(m) {
     <div class="member-avatar" style="background:${groupColor};">${_esc(initials)}</div>
     <div class="member-info">
       <div class="member-name">${_esc(m.name)} ${m.active ? '' : '<span style="color:#94a3b8;font-size:.75rem;">(inactive)</span>'}</div>
-      <div class="member-meta">${_esc(m.group)} · ${_esc(m.roleType)}</div>
+      <div class="member-meta">${_esc(m.group)} · ${_esc(m.roleType)}${m.birthday ? ' · 🎂 ' + formatBirthday(m.birthday) : ''}</div>
       <div class="member-roles">${chipsHtml || '<span style="color:#94a3b8;font-size:.7rem;">No roles assigned</span>'}</div>
       <div style="font-size:.65rem;color:#94a3b8;margin-top:3px;">${m.updatedAt ? 'Updated ' + formatUpdatedAt(m.updatedAt) : '—'}</div>
     </div>
@@ -1323,6 +1334,10 @@ function openMemberForm(member) {
           <option value="false" ${m.active===false?'selected':''}>Inactive</option>
         </select>
       </div>
+      <div>
+        <label>Birthday (optional)</label>
+        <input type="date" id="m-birthday" value="${_esc(m.birthday || '')}" style="background:#fff;color:#1e293b;" />
+      </div>
     </div>
 
     <button class="btn btn-primary" onclick="submitMember()">Save Member</button>
@@ -1349,6 +1364,7 @@ function submitMember() {
     canReport:    !noRole && document.getElementById('mt-report').classList.contains('on'),
     canDrive:     document.getElementById('mt-drive').classList.contains('on'),
     active:       document.getElementById('m-active').value === 'true',
+    birthday:     document.getElementById('m-birthday').value || '',
     updatedAt:    new Date().toISOString()
   };
 
@@ -1472,6 +1488,30 @@ function getEligibleFacilitators(group) {
   }
   // Separated: group match
   return active.filter(m => m.canFacilitate && groupMatch(m, group)).map(m => m.name);
+}
+
+// =============================================
+// Birthday Helpers
+// =============================================
+function formatBirthday(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Perth' });
+}
+
+// Returns active members whose birthday (month+day) falls within ±7 days of the given date ISO string.
+function _birthdaysNearDate(fridayISO) {
+  const friday = new Date(fridayISO + 'T00:00:00');
+  const WINDOW = 7 * 24 * 60 * 60 * 1000;
+  return allMembers.filter(function(m) {
+    if (!m.birthday || !m.active) return false;
+    const yr = friday.getFullYear();
+    const bd = new Date(m.birthday + 'T00:00:00');
+    return [-1, 0, 1].some(function(dy) {
+      const candidate = new Date(yr + dy, bd.getMonth(), bd.getDate());
+      return Math.abs(candidate.getTime() - friday.getTime()) <= WINDOW;
+    });
+  });
 }
 
 // =============================================

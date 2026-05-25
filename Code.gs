@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.34.1 (2026-05-25)
+// Version: 1.35.0 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.34.1';
+const VERSION      = '1.35.0';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -147,6 +147,7 @@ function getMembers(ss) {
     const row = data[i];
     if (!row[0]) continue;
     const rawUpdatedAt = row[9];
+    const rawBirthday  = row[10];
     members.push({
       rowIndex:      i + 1,
       name:          String(row[0]),
@@ -158,7 +159,10 @@ function getMembers(ss) {
       active:        row[6] === true,
       roleType:      String(row[7] || 'Adult'),
       canDrive:      row[8] === true,
-      updatedAt:     rawUpdatedAt ? Utilities.formatDate(new Date(rawUpdatedAt), tz, "yyyy-MM-dd'T'HH:mm:ss") : ''
+      updatedAt:     rawUpdatedAt ? Utilities.formatDate(new Date(rawUpdatedAt), tz, "yyyy-MM-dd'T'HH:mm:ss") : '',
+      birthday:      rawBirthday instanceof Date
+                       ? Utilities.formatDate(rawBirthday, tz, 'yyyy-MM-dd')
+                       : String(rawBirthday || '')
     });
   }
 
@@ -316,14 +320,14 @@ function saveMember(member) {
       member.active        !== false,
       member.roleType      || 'Adult',
       member.canDrive      === true,
-      updatedAt
+      updatedAt,
+      member.birthday      || ''
     ];
 
-    if (member.rowIndex) {
-      sheet.getRange(member.rowIndex, 1, 1, 10).setValues([rowData]);
-    } else {
-      sheet.appendRow(rowData);
-    }
+    const targetRow = member.rowIndex || (sheet.getLastRow() + 1);
+    // Set birthday cell to plain text before writing so Sheets doesn't auto-convert the date string.
+    if (member.birthday) sheet.getRange(targetRow, 11).setNumberFormat('@');
+    sheet.getRange(targetRow, 1, 1, 11).setValues([rowData]);
 
     _clearDataCache();
     return { success: true };
@@ -414,6 +418,20 @@ function migrateSchemaToV134() {
     return 'Renamed Roster → Schedule';
   }
   return 'Roster tab not found — may already be renamed';
+}
+
+// Adds "Birthday" column to Members (col K). Idempotent — safe to re-run.
+function migrateSchemaToV135() {
+  const ss     = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const mSheet = ss.getSheetByName(MEMBERS_SHEET_NAME);
+  if (!mSheet) return 'Members sheet not found';
+  const mData  = mSheet.getDataRange().getValues();
+  const hIdx   = _normalizeStr(String(mData[0][0])) === 'name' ? 0 : 1;
+  if (_normalizeStr(String(mData[hIdx][10] || '')) !== 'birthday') {
+    mSheet.getRange(hIdx + 1, 11).setValue('Birthday');
+  }
+  _clearDataCache();
+  return 'Migration v1.35 complete';
 }
 
 // Adds "Last Updated" column to Members (col J) and Lyrics (col C).
@@ -615,10 +633,10 @@ function _formatMembersSheet(ss) {
 
   const maxRows        = sheet.getMaxRows();
   const dataRows       = maxRows - dataStartRow + 1;
-  const DATA_COL_COUNT = 10; // Members schema: 10 columns (A–J)
+  const DATA_COL_COUNT = 11; // Members schema: 11 columns (A–K)
 
   // --- Column widths (positional, matches Members schema order) ---
-  [160, 70, 105, 80, 110, 90, 70, 90, 80, 145].forEach(function(w, i) {
+  [160, 70, 105, 80, 110, 90, 70, 90, 80, 145, 100].forEach(function(w, i) {
     sheet.setColumnWidth(i + 1, w);
   });
 
@@ -683,6 +701,12 @@ function _formatMembersSheet(ss) {
     sheet.getRange(dataStartRow, luIdx + 1, dataRows, 1)
       .setNumberFormat('dd/mm/yyyy hh:mm')
       .clearDataValidations(); // prevent checkbox inherited from adjacent column
+  }
+
+  // --- Birthday: plain text format ---
+  const bdayIdx = lower.indexOf('birthday');
+  if (bdayIdx >= 0) {
+    sheet.getRange(dataStartRow, bdayIdx + 1, dataRows, 1).setNumberFormat('@');
   }
 
   Logger.log('Members sheet formatted (' + DATA_COL_COUNT + ' data columns, ' + (hasNoticeRow ? 'post' : 'pre') + '-migration).');
