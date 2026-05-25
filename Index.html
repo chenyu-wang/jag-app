@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.41.0 (2026-05-25) -->
+  <!-- Version: 1.42.0 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -929,7 +929,7 @@ function rebuildSections(eventType) {
       </div>
       <div class="field">
         <label>Notes / Reason</label>
-        <input type="text" id="shared-notes" placeholder="Type reason..." value="${_esc(ref.notes)}" />
+        <input type="text" id="shared-notes" placeholder="Type reason..." value="${_esc(ref.notes)}" maxlength="200" />
       </div>`;
     container.appendChild(div);
     return;
@@ -953,7 +953,7 @@ function rebuildSections(eventType) {
       </div>
       <div class="field">
         <label>💬 Comments (optional)</label>
-        <input type="text" id="special-comment" placeholder="General notes or comments..." value="${_esc(commentText)}" />
+        <input type="text" id="special-comment" placeholder="General notes or comments..." value="${_esc(commentText)}" maxlength="200" />
       </div>
       <div id="special-fields-container"></div>
       <button type="button" class="add-field-btn" onclick="addSpecialField()">+ Add Field</button>`;
@@ -1000,7 +1000,7 @@ function rebuildSections(eventType) {
       </div>
       <div class="field">
         <label>Notes (optional)</label>
-        <input type="text" id="shared-notes" placeholder="Type notes..." value="${_esc(ref.notes)}" />
+        <input type="text" id="shared-notes" placeholder="Type notes..." value="${_esc(ref.notes)}" maxlength="200" />
       </div>
       ${eventType === 'Youth Hour' ? `
       <div class="field">
@@ -1055,7 +1055,7 @@ function rebuildSections(eventType) {
       </div>
       <div class="field">
         <label>Notes (optional)</label>
-        <input type="text" id="${grp}-notes" placeholder="Type notes..." value="${_esc(entry.notes)}" />
+        <input type="text" id="${grp}-notes" placeholder="Type notes..." value="${_esc(entry.notes)}" maxlength="200" />
       </div>
     `;
     container.appendChild(sec);
@@ -1074,8 +1074,8 @@ function addSpecialField(label, value, container) {
   const row = document.createElement('div');
   row.className = 'special-field-row';
   row.innerHTML = `
-    <input type="text" class="sf-label" placeholder="Field name" value="${_esc(label)}" style="background:#fff;color:#1e293b;" />
-    <input type="text" class="sf-value" placeholder="Value" value="${_esc(value)}" style="background:#fff;color:#1e293b;" />
+    <input type="text" class="sf-label" placeholder="Field name" value="${_esc(label)}" style="background:#fff;color:#1e293b;" maxlength="50" />
+    <input type="text" class="sf-value" placeholder="Value" value="${_esc(value)}" style="background:#fff;color:#1e293b;" maxlength="150" />
     <button onclick="this.closest('.special-field-row').remove()">✕</button>`;
   c.appendChild(row);
 }
@@ -1426,7 +1426,7 @@ function openMemberForm(member) {
 
     <div class="field">
       <label>Name</label>
-      <input type="text" id="m-name" value="${_esc(m.name)}" placeholder="Full name" />
+      <input type="text" id="m-name" value="${_esc(m.name)}" placeholder="Full name" maxlength="60" />
     </div>
 
     <div class="field-row">
@@ -1565,8 +1565,8 @@ function updateRoleToggles() {
   const rt  = document.getElementById('m-roletype');
   const grp = document.getElementById('m-group');
   if (!rt) return;
-  const noRole     = _isNoRoleType(rt.value);
-  const noDrive    = rt.value !== 'Adult' || (grp && grp.value !== 'JAG1');
+  const noRole  = _isNoRoleType(rt.value);
+  const noDrive = !(rt.value === 'Adult' || (rt.value === 'Student' && grp && grp.value === 'JAG1'));
   ['mt-organise', 'mt-pw', 'mt-facilitate', 'mt-report'].forEach(id => {
     const btn = document.getElementById(id);
     if (!btn) return;
@@ -2459,12 +2459,12 @@ function openLyricForm(lyric) {
 
     <div class="field">
       <label>Song Name</label>
-      <input type="text" id="l-name" value="${_esc(l.songName || '')}" placeholder="Song title" />
+      <input type="text" id="l-name" value="${_esc(l.songName || '')}" placeholder="Song title" maxlength="100" />
     </div>
 
     <div class="field">
       <label>Lyric Copies</label>
-      <input type="text" id="l-count" value="${l.copyCount !== undefined ? l.copyCount : ''}" placeholder="Number of copies" inputmode="numeric" pattern="[0-9]*" />
+      <input type="number" id="l-count" value="${l.copyCount !== undefined ? l.copyCount : ''}" placeholder="0" min="0" max="999" style="background:#fff;color:#1e293b;" />
     </div>
 
     <button class="btn btn-primary" onclick="submitLyric()">Save</button>
@@ -2478,7 +2478,7 @@ function submitLyric() {
   if (!name) { showToast('Song name is required'); return; }
   const countRaw = (document.getElementById('l-count').value || '').trim();
   const count = countRaw === '' ? 0 : parseInt(countRaw, 10);
-  if (isNaN(count) || count < 0) { showToast('Copy count must be a non-negative number'); return; }
+  if (isNaN(count) || count < 0 || count > 999) { showToast('Copy count must be 0 – 999'); return; }
 
   const lyric = {
     rowIndex:  editingLyric ? editingLyric.rowIndex : null,
