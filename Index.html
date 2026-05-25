@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.37.3 (2026-05-25) -->
+  <!-- Version: 1.37.4 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -235,7 +235,8 @@ let allEntries = [];
 let allMembers = [];
 let allLyrics    = [];
 let _lyricsShown = 40;        // how many lyrics are visible when not searching
-let _lyricsSearchTimer = null; // debounce handle for the search input
+let _lyricsSearchTimer  = null; // debounce handle for the lyrics search input
+let _membersSearchTimer = null; // debounce handle for the members search input
 let currentView = 'home';
 let editingEntries = []; // [] = new, [e] = single edit, [e1,e2] = combined edit
 let editingMember  = null;
@@ -1232,6 +1233,45 @@ function renderMembers() {
   const c = document.getElementById('content');
   c.innerHTML = '';
 
+  const searchEl = document.createElement('input');
+  searchEl.type        = 'text';
+  searchEl.className   = 'lyrics-search';
+  searchEl.id          = 'members-search';
+  searchEl.placeholder = 'Search members…';
+  searchEl.oninput     = _filterMembers;
+  c.appendChild(searchEl);
+
+  const listEl = document.createElement('div');
+  listEl.id = 'members-list';
+  c.appendChild(listEl);
+
+  _renderMembersList('');
+}
+
+function _renderMembersList(query) {
+  const listEl = document.getElementById('members-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+
+  const q = (query || '').toLowerCase().trim();
+
+  if (q) {
+    const matches = allMembers.filter(function(m) {
+      return m.name.toLowerCase().includes(q)
+          || m.group.toLowerCase().includes(q)
+          || m.roleType.toLowerCase().includes(q);
+    });
+    if (matches.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.innerHTML = '<p>No members matching "' + _esc(query) + '"</p>';
+      listEl.appendChild(empty);
+    } else {
+      matches.forEach(function(m) { listEl.appendChild(buildMemberCard(m)); });
+    }
+    return;
+  }
+
   const active   = allMembers.filter(m => m.active);
   const inactive = allMembers.filter(m => !m.active);
 
@@ -1239,18 +1279,25 @@ function renderMembers() {
     const h = document.createElement('div');
     h.className = 'section-heading';
     h.textContent = 'Active Members';
-    c.appendChild(h);
-    active.forEach(m => c.appendChild(buildMemberCard(m)));
+    listEl.appendChild(h);
+    active.forEach(m => listEl.appendChild(buildMemberCard(m)));
   }
 
   if (inactive.length > 0) {
     const h = document.createElement('div');
     h.className = 'section-heading';
     h.textContent = 'Inactive';
-    c.appendChild(h);
-    inactive.forEach(m => c.appendChild(buildMemberCard(m)));
+    listEl.appendChild(h);
+    inactive.forEach(m => listEl.appendChild(buildMemberCard(m)));
   }
+}
 
+function _filterMembers() {
+  clearTimeout(_membersSearchTimer);
+  _membersSearchTimer = setTimeout(function() {
+    const q = (document.getElementById('members-search') || {}).value || '';
+    _renderMembersList(q);
+  }, 150);
 }
 
 function buildMemberCard(m) {
@@ -1374,7 +1421,8 @@ function submitMember() {
     updatedAt:    new Date().toISOString()
   };
 
-  const isNew = !editingMember;
+  const isNew     = !editingMember;
+  const _memberQ  = (document.getElementById('members-search') || {}).value || '';
   _setModalSaving(true, 'Save Member');
   google.script.run
     .withSuccessHandler(function(result) {
@@ -1391,7 +1439,7 @@ function submitMember() {
       _dupFirstNamesCache = null;
       _activeCache = null;
       currentView = 'members';
-      renderMembers();
+      _renderMembersList(_memberQ);
       if (isNew) loadData(); // only new members need server rowIndex sync
     })
     .withFailureHandler(function(err) { _setModalSaving(false, 'Save Member'); showToast('Error: ' + err.message); })
@@ -1409,12 +1457,11 @@ function deleteMemberRow(rowIndex) {
     .withSuccessHandler(function(result) {
       if (!result.success) { showToast('Error: ' + result.error); return; }
       showToast('Member removed');
-      // Optimistic cache update so members view reflects deletion immediately
       allMembers = allMembers.filter(function(m) { return m.rowIndex !== rowIndex; });
       _dupFirstNamesCache = null;
       _activeCache = null;
       currentView = 'members';
-      renderMembers();
+      _renderMembersList((document.getElementById('members-search') || {}).value || '');
       loadData(); // refresh in background to sync rowIndices
     })
     .withFailureHandler(err => showToast('Error: ' + err.message))
