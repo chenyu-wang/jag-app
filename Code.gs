@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.36.0 (2026-05-25)
+// Version: 1.36.1 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.36.0';
+const VERSION      = '1.36.1';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -483,6 +483,28 @@ function migrateSchemaToV134() {
     return 'Renamed Roster → Schedule';
   }
   return 'Roster tab not found — may already be renamed';
+}
+
+// Strips legacy "YYYY-MM-DD" birthday values to "MM-DD". Idempotent — safe to re-run.
+function migrateSchemaToV136() {
+  const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(MEMBERS_SHEET_NAME);
+  if (!sheet) return 'Members sheet not found';
+  const data  = sheet.getDataRange().getValues();
+  const startIdx = _normalizeStr(String(data[0][0])) === 'name' ? 1 : 2;
+  let updated = 0;
+  for (let i = startIdx; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    const bday = String(data[i][10] || '');
+    if (/^\d{4}-(\d{2}-\d{2})$/.test(bday)) {
+      const cell = sheet.getRange(i + 1, 11);
+      cell.setNumberFormat('@');
+      cell.setValue(bday.slice(5));
+      updated++;
+    }
+  }
+  _clearDataCache();
+  return 'migrateSchemaToV136: ' + updated + ' birthday cells updated to MM-DD';
 }
 
 // Adds "Birthday" column to Members (col K). Idempotent — safe to re-run.

@@ -145,6 +145,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.35.2 | Add `seedBirthdays()` one-time seeder — matches 24 members by first name and fills Birthday col K | `seedBirthdays()` ✓ delete after run |
 | v1.35.3 | Rename `ROSTER_SHEET_NAME` → `SCHEDULE_SHEET_NAME` and `PORTAL_NOTICE` → `APP_NOTICE` throughout Code.gs | n/a |
 | v1.36.0 | Birthday format changed to `MM-DD` (no year); `getMembers()` normalises legacy `YYYY-MM-DD` → `MM-DD`; birthday input replaced with Month+Day `<select>` pair (via `_bdaySelects()`); all `formatUpdatedAt`, relative-date fallback, and `formatDateLong` display calls fixed to `timeZone:'Australia/Perth'` | n/a |
+| v1.36.1 | Add `migrateSchemaToV136()` to strip legacy `YYYY-MM-DD` birthday cells in sheet to `MM-DD` | `migrateSchemaToV136()` ✓ delete after run |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
