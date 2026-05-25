@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.36.1 (2026-05-25)
+// Version: 1.36.2 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.36.1';
+const VERSION      = '1.36.2';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -409,142 +409,6 @@ function deleteLyric(rowIndex) {
   } catch (e) {
     return { success: false, error: e.toString() };
   }
-}
-
-// ---- One-time seeders (delete after confirmed run) ----
-
-// Matches members by first name (case-insensitive) and fills Birthday col K.
-// Only writes to rows where Birthday is currently empty. Run once from the editor.
-function seedBirthdays() {
-  const BIRTHDAYS = {
-    'jordan':        '2000-01-11',
-    'bridie':        '2000-01-26',
-    'julia':         '2000-01-28',
-    'andrew':        '2000-02-22',
-    'isabella':      '2000-03-08',
-    'anna':          '2000-03-09',
-    'caleb':         '2000-03-14',
-    'james':         '2000-05-19',
-    'elizabeth':     '2000-05-22',
-    'arielle':       '2000-05-29',
-    'george':        '2000-06-08',
-    'justine':       '2000-07-11',
-    'tiffany':       '2000-07-12',
-    'cherry':        '2000-07-23',
-    'mia':           '2000-08-07',
-    'vianny':        '2000-08-26',
-    'luke johnstone':'2000-09-27',
-    'luke':          '2000-09-27',
-    'angel':         '2000-10-05',
-    'chenyu':        '2000-10-22',
-    'sonia':         '2000-11-24',
-    'preston':       '2000-11-29',
-    'jaden':         '2000-12-08',
-    'steph':         '2000-12-11',
-    'nathan':        '2000-12-13'
-  };
-
-  const ss     = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet  = ss.getSheetByName(MEMBERS_SHEET_NAME);
-  const data   = sheet.getDataRange().getValues();
-  const hIdx   = _normalizeStr(String(data[0][0])) === 'name' ? 0 : 1;
-  let updated  = 0, skipped = 0;
-
-  for (let i = hIdx + 1; i < data.length; i++) {
-    const fullName = String(data[i][0] || '').trim();
-    if (!fullName) continue;
-    const existing = String(data[i][10] || '').trim();
-    if (existing) { skipped++; continue; } // already has a birthday
-
-    // Try full name (lowercase), then first name only
-    const lowerFull  = fullName.toLowerCase();
-    const lowerFirst = lowerFull.split(' ')[0];
-    const bday = BIRTHDAYS[lowerFull] || BIRTHDAYS[lowerFirst];
-    if (!bday) continue;
-
-    sheet.getRange(i + 1, 11).setNumberFormat('@').setValue(bday);
-    updated++;
-    Logger.log('Set birthday for ' + fullName + ' → ' + bday);
-  }
-
-  _clearDataCache();
-  return 'seedBirthdays: ' + updated + ' updated, ' + skipped + ' already set, check Execution Log for details';
-}
-
-// ---- Migrations ----
-
-// Renames the "Roster" sheet tab to "Schedule". Idempotent — safe to re-run.
-function migrateSchemaToV134() {
-  const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('Roster');
-  if (sheet) {
-    sheet.setName('Schedule');
-    _clearDataCache();
-    return 'Renamed Roster → Schedule';
-  }
-  return 'Roster tab not found — may already be renamed';
-}
-
-// Strips legacy "YYYY-MM-DD" birthday values to "MM-DD". Idempotent — safe to re-run.
-function migrateSchemaToV136() {
-  const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName(MEMBERS_SHEET_NAME);
-  if (!sheet) return 'Members sheet not found';
-  const data  = sheet.getDataRange().getValues();
-  const startIdx = _normalizeStr(String(data[0][0])) === 'name' ? 1 : 2;
-  let updated = 0;
-  for (let i = startIdx; i < data.length; i++) {
-    if (!data[i][0]) continue;
-    const bday = String(data[i][10] || '');
-    if (/^\d{4}-(\d{2}-\d{2})$/.test(bday)) {
-      const cell = sheet.getRange(i + 1, 11);
-      cell.setNumberFormat('@');
-      cell.setValue(bday.slice(5));
-      updated++;
-    }
-  }
-  _clearDataCache();
-  return 'migrateSchemaToV136: ' + updated + ' birthday cells updated to MM-DD';
-}
-
-// Adds "Birthday" column to Members (col K). Idempotent — safe to re-run.
-function migrateSchemaToV135() {
-  const ss     = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const mSheet = ss.getSheetByName(MEMBERS_SHEET_NAME);
-  if (!mSheet) return 'Members sheet not found';
-  const mData  = mSheet.getDataRange().getValues();
-  const hIdx   = _normalizeStr(String(mData[0][0])) === 'name' ? 0 : 1;
-  if (_normalizeStr(String(mData[hIdx][10] || '')) !== 'birthday') {
-    mSheet.getRange(hIdx + 1, 11).setValue('Birthday');
-  }
-  _clearDataCache();
-  return 'Migration v1.35 complete';
-}
-
-// Adds "Last Updated" column to Members (col J) and Lyrics (col C).
-// Idempotent — safe to re-run.
-function migrateSchemaToV133() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-
-  const mSheet = ss.getSheetByName(MEMBERS_SHEET_NAME);
-  if (mSheet) {
-    const mData    = mSheet.getDataRange().getValues();
-    const hIdx     = _normalizeStr(String(mData[0][0])) === 'name' ? 0 : 1;
-    if (_normalizeStr(String(mData[hIdx][9] || '')) !== 'lastupdated') {
-      mSheet.getRange(hIdx + 1, 10).setValue('Last Updated');
-    }
-  }
-
-  const lSheet = ss.getSheetByName(LYRICS_SHEET_NAME);
-  if (lSheet) {
-    const lData = lSheet.getDataRange().getValues();
-    if (_normalizeStr(String(lData[0][2] || '')) !== 'lastupdated') {
-      lSheet.getRange(1, 3).setValue('Last Updated');
-    }
-  }
-
-  _clearDataCache();
-  return 'Migration v1.33 complete';
 }
 
 // ---- Helpers ----
