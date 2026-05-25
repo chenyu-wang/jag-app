@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.37.9 (2026-05-25) -->
+  <!-- Version: 1.38.0 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1595,8 +1595,7 @@ function _bdaySelects(birthday) {
 // Returns active members whose birthday (month+day) falls within ±7 days of the given date ISO string.
 function _birthdaysNearDate(fridayISO) {
   const friday  = new Date(fridayISO + 'T00:00:00');
-  const PAST_MS   = 2  * 24 * 60 * 60 * 1000;  // 2 days before event
-  const FUTURE_MS = 14 * 24 * 60 * 60 * 1000;  // 14 days after event
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;  // one LG week
   return allMembers.filter(function(m) {
     if (!m.birthday || !m.active) return false;
     const yr = friday.getFullYear();
@@ -1606,7 +1605,7 @@ function _birthdaysNearDate(fridayISO) {
     if (isNaN(month) || isNaN(day)) return false;
     return [-1, 0, 1].some(function(offset) {
       const diff = new Date(yr + offset, month, day).getTime() - friday.getTime();
-      return diff >= -PAST_MS && diff <= FUTURE_MS;
+      return diff >= -WEEK_MS && diff <= WEEK_MS;
     });
   });
 }
