@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.42.3 (2026-05-25)
+// Version: 1.42.4 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.42.3';
+const VERSION      = '1.42.4';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -38,28 +38,41 @@ function getVersion() {
 // ---- Data Fetching ----
 
 function getAllData() {
-  // C: serve from cache when available — avoids opening the spreadsheet on every load.
-  // Cache is cleared by _clearDataCache() on every write, so it never serves stale data after saves.
+  // C: split across three cache keys so each gets its own 100 KB slot.
+  // Each key is independently invalidated by the selective clear helpers below.
   const cache = CacheService.getScriptCache();
-  try {
-    const hit = cache.get('allData');
-    if (hit) return JSON.parse(hit);
-  } catch(e) {}
+  let entriesData, membersData, lyricsData;
+  try { const h = cache.get('allData_entries'); if (h) entriesData = JSON.parse(h); } catch(e) {}
+  try { const h = cache.get('allData_members'); if (h) membersData = JSON.parse(h); } catch(e) {}
+  try { const h = cache.get('allData_lyrics');  if (h) lyricsData  = JSON.parse(h); } catch(e) {}
 
-  // B: open spreadsheet once and share it — avoids two separate openById calls
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const rosterResult = getRosterEntries(ss);
-  const data = {
-    entries:      rosterResult.list,
-    hasMorePast:  rosterResult.hasMorePast,
-    hasMoreFuture: rosterResult.hasMoreFuture,
-    members:      getMembers(ss),
-    lyrics:       getLyrics(ss),
-    version:      VERSION,
-    versionDate:  VERSION_DATE
+  if (!entriesData || !membersData || !lyricsData) {
+    // B: open spreadsheet once and share across all missed fetches.
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    if (!entriesData) {
+      const r = getRosterEntries(ss);
+      entriesData = { list: r.list, hasMorePast: r.hasMorePast, hasMoreFuture: r.hasMoreFuture };
+      try { cache.put('allData_entries', JSON.stringify(entriesData), 60); } catch(e) {}
+    }
+    if (!membersData) {
+      membersData = getMembers(ss);
+      try { cache.put('allData_members', JSON.stringify(membersData), 60); } catch(e) {}
+    }
+    if (!lyricsData) {
+      lyricsData = getLyrics(ss);
+      try { cache.put('allData_lyrics', JSON.stringify(lyricsData), 60); } catch(e) {}
+    }
+  }
+
+  return {
+    entries:       entriesData.list,
+    hasMorePast:   entriesData.hasMorePast,
+    hasMoreFuture: entriesData.hasMoreFuture,
+    members:       membersData,
+    lyrics:        lyricsData,
+    version:       VERSION,
+    versionDate:   VERSION_DATE
   };
-  try { cache.put('allData', JSON.stringify(data), 60); } catch(e) {} // 60s TTL; silent if >100KB
-  return data;
 }
 
 // Load a 1-year chunk of entries adjacent to the current loaded window.
@@ -289,7 +302,7 @@ function saveRosterEntry(entry) {
     sheet.getRange(targetRow, 1, 1, numCols).setValues([rowData]);
 
     SpreadsheetApp.flush(); // commit writes before sort so getLastColumn() sees col M
-    _clearDataCache();
+    _clearEntriesCache();
     if (needsSort) {
       sortRosterSheet(sheet);
       return { success: true };
@@ -350,7 +363,7 @@ function saveRosterEntries(entries) {
     });
 
     SpreadsheetApp.flush(); // commit writes before sort so getLastColumn() sees col M
-    _clearDataCache();
+    _clearEntriesCache();
     if (needsSort) {
       sortRosterSheet(sheet);
       return { success: true };
@@ -366,7 +379,7 @@ function deleteRosterEntry(rowIndex) {
     SpreadsheetApp.openById(SPREADSHEET_ID)
       .getSheetByName(SCHEDULE_SHEET_NAME)
       .deleteRow(rowIndex);
-    _clearDataCache();
+    _clearEntriesCache();
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -401,7 +414,7 @@ function saveMember(member) {
     if (member.birthday) sheet.getRange(targetRow, 11).setNumberFormat('@');
     sheet.getRange(targetRow, 1, 1, 11).setValues([rowData]);
 
-    _clearDataCache();
+    _clearMembersCache();
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -413,7 +426,7 @@ function deleteMember(rowIndex) {
     SpreadsheetApp.openById(SPREADSHEET_ID)
       .getSheetByName(MEMBERS_SHEET_NAME)
       .deleteRow(rowIndex);
-    _clearDataCache();
+    _clearMembersCache();
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -454,11 +467,11 @@ function saveLyric(lyric) {
 
     if (lyric.rowIndex) {
       sheet.getRange(lyric.rowIndex, 1, 1, 3).setValues([rowData]);
-      _clearDataCache();
+      _clearLyricsCache();
       return { success: true, rowIndex: lyric.rowIndex };
     } else {
       sheet.appendRow(rowData);
-      _clearDataCache();
+      _clearLyricsCache();
       return { success: true, rowIndex: sheet.getLastRow() };
     }
   } catch (e) {
@@ -471,7 +484,7 @@ function deleteLyric(rowIndex) {
     SpreadsheetApp.openById(SPREADSHEET_ID)
       .getSheetByName(LYRICS_SHEET_NAME)
       .deleteRow(rowIndex);
-    _clearDataCache();
+    _clearLyricsCache();
     return { success: true };
   } catch (e) {
     return { success: false, error: e.toString() };
@@ -513,7 +526,16 @@ function migrateSchemaToV137() {
 // ---- Helpers ----
 
 function _clearDataCache() {
-  try { CacheService.getScriptCache().remove('allData'); } catch(e) {}
+  try { CacheService.getScriptCache().removeAll(['allData_entries', 'allData_members', 'allData_lyrics']); } catch(e) {}
+}
+function _clearEntriesCache() {
+  try { CacheService.getScriptCache().remove('allData_entries'); } catch(e) {}
+}
+function _clearMembersCache() {
+  try { CacheService.getScriptCache().remove('allData_members'); } catch(e) {}
+}
+function _clearLyricsCache() {
+  try { CacheService.getScriptCache().remove('allData_lyrics'); } catch(e) {}
 }
 
 function _applyNoticeStyle(range) {
