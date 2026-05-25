@@ -139,6 +139,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.33.0 | Add Last Updated timestamp to Members (col J) and Lyrics (col C); shown on member and lyric cards | `migrateSchemaToV133()` |
 | v1.33.1 | Update `_formatMembersSheet` to 10 cols + Last Updated datetime format; add `_formatLyricsSheet` with widths, banding, datetime format; wire into `formatSheets()` | n/a |
 | v1.34.0 | Rename "Roster" sheet tab to "Schedule" (`ROSTER_SHEET_NAME = 'Schedule'`); fix Lyrics header style (bold + `#ede9fe` bg); fix Members Last Updated checkbox (clearDataValidations); rename file header comment to "JAG App" | `migrateSchemaToV134()` |
+| v1.34.1 | Always show Last Updated line on member and lyric cards — display "—" for records not yet stamped instead of hiding the field | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
