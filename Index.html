@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.37.0 (2026-05-25) -->
+  <!-- Version: 1.37.1 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1511,12 +1511,11 @@ function formatBirthday(dateStr) {
   const parts = dateStr.split('-');
   if (parts.length < 2) return '';
   const hasYear = parts.length === 3;
-  const month = parseInt(hasYear ? parts[1] : parts[0], 10) - 1;
-  const day   = parseInt(hasYear ? parts[2] : parts[1], 10);
-  if (isNaN(month) || isNaN(day)) return '';
-  const yr   = hasYear ? parseInt(parts[0], 10) : 2000;
-  const opts = hasYear ? { day: 'numeric', month: 'short', year: 'numeric' } : { day: 'numeric', month: 'short' };
-  return new Date(yr, month, day).toLocaleDateString('en-AU', opts);
+  const mi  = parseInt(hasYear ? parts[1] : parts[0], 10) - 1;
+  const day = parseInt(hasYear ? parts[2] : parts[1], 10);
+  if (isNaN(mi) || isNaN(day) || mi < 0 || mi > 11) return '';
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return day + ' ' + MONTHS[mi] + (hasYear ? ' ' + parts[0] : '');
 }
 
 // Generates month + day + optional year inputs for the birthday field.
