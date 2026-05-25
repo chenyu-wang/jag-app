@@ -150,6 +150,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.36.3 | Fix iOS home screen icon: replace `data:` URI (unsupported by iOS) with jsDelivr CDN URL pointing to `icon.png` committed to repo; simplify PWA manifest IIFE | n/a |
 | v1.37.0 | Birthday form adds optional Year field (stored as `YYYY-MM-DD` when year given, `MM-DD` when not); `formatBirthday` shows year only when present; add `migrateSchemaToV137()` to backfill missing Last Updated with 2026-01-01 | `migrateSchemaToV137()` ✓ delete after run |
 | v1.37.1 | `formatBirthday` uses hardcoded AU format (`D Mon` / `D Mon YYYY`) instead of `toLocaleDateString` to ensure consistent display across iOS/Android/desktop | n/a |
+| v1.37.2 | Replace birthday year `<input type="number">` with a `<select>` (1960–2010) for consistent look/feel with Month and Day selects | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.

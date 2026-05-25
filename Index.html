@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.37.1 (2026-05-25) -->
+  <!-- Version: 1.37.2 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1367,9 +1367,9 @@ function submitMember() {
     birthday:     (function() {
                     const mo = (document.getElementById('m-bday-month') || {}).value || '';
                     const dy = (document.getElementById('m-bday-day')   || {}).value || '';
-                    const yr = ((document.getElementById('m-bday-year') || {}).value || '').trim();
+                    const yr = (document.getElementById('m-bday-year') || {}).value || '';
                     if (!mo || !dy) return '';
-                    return (yr && /^\d{4}$/.test(yr)) ? yr + '-' + mo + '-' + dy : mo + '-' + dy;
+                    return yr ? yr + '-' + mo + '-' + dy : mo + '-' + dy;
                   })(),
     updatedAt:    new Date().toISOString()
   };
@@ -1518,7 +1518,7 @@ function formatBirthday(dateStr) {
   return day + ' ' + MONTHS[mi] + (hasYear ? ' ' + parts[0] : '');
 }
 
-// Generates month + day + optional year inputs for the birthday field.
+// Generates month + day + optional year selects for the birthday field.
 function _bdaySelects(birthday) {
   const parts = (birthday || '').split('-');
   const hasYear = parts.length === 3;
@@ -1534,9 +1534,14 @@ function _bdaySelects(birthday) {
     const v = String(i + 1).padStart(2, '0');
     return '<option value="' + v + '"' + (curD === v ? ' selected' : '') + '>' + (i + 1) + '</option>';
   }).join('');
+  const curYear = parseInt(curY, 10) || 0;
+  const yOpts = '<option value="">Year</option>' + Array.from({length: 51}, function(_, i) {
+    const yr = 2010 - i;
+    return '<option value="' + yr + '"' + (curYear === yr ? ' selected' : '') + '>' + yr + '</option>';
+  }).join('');
   return '<select id="m-bday-month" style="background:#fff;color:#1e293b;">' + mOpts + '</select>'
-       + '<select id="m-bday-day" style="background:#fff;color:#1e293b;margin-left:6px;">' + dOpts + '</select>'
-       + '<input type="number" id="m-bday-year" min="1900" max="2099" placeholder="Year" value="' + curY + '" style="width:72px;background:#fff;color:#1e293b;margin-left:6px;" />';
+       + '<select id="m-bday-day"   style="background:#fff;color:#1e293b;margin-left:6px;">' + dOpts + '</select>'
+       + '<select id="m-bday-year"  style="background:#fff;color:#1e293b;margin-left:6px;">' + yOpts + '</select>';
 }
 
 // Returns active members whose birthday (month+day) falls within ±7 days of the given date ISO string.
