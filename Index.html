@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.37.4 (2026-05-25) -->
+  <!-- Version: 1.37.5 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1594,8 +1594,9 @@ function _bdaySelects(birthday) {
 
 // Returns active members whose birthday (month+day) falls within ±7 days of the given date ISO string.
 function _birthdaysNearDate(fridayISO) {
-  const friday = new Date(fridayISO + 'T00:00:00');
-  const WINDOW = 7 * 24 * 60 * 60 * 1000;
+  const friday  = new Date(fridayISO + 'T00:00:00');
+  const PAST_MS   = 2  * 24 * 60 * 60 * 1000;  // 2 days before event
+  const FUTURE_MS = 14 * 24 * 60 * 60 * 1000;  // 14 days after event
   return allMembers.filter(function(m) {
     if (!m.birthday || !m.active) return false;
     const yr = friday.getFullYear();
@@ -1603,9 +1604,9 @@ function _birthdaysNearDate(fridayISO) {
     const month = parseInt(parts.length === 3 ? parts[1] : parts[0], 10) - 1;
     const day   = parseInt(parts.length === 3 ? parts[2] : parts[1], 10);
     if (isNaN(month) || isNaN(day)) return false;
-    return [-1, 0, 1].some(function(dy) {
-      const candidate = new Date(yr + dy, month, day);
-      return Math.abs(candidate.getTime() - friday.getTime()) <= WINDOW;
+    return [-1, 0, 1].some(function(offset) {
+      const diff = new Date(yr + offset, month, day).getTime() - friday.getTime();
+      return diff >= -PAST_MS && diff <= FUTURE_MS;
     });
   });
 }
