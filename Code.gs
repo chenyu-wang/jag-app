@@ -1,14 +1,14 @@
 // ============================================================
-// JAG Life Group Roster - Google Apps Script Backend
+// JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.33.1 (2026-05-25)
+// Version: 1.34.0 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.33.1';
+const VERSION      = '1.34.0';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
-const ROSTER_SHEET_NAME = 'Roster';   // year-agnostic — supports 2026 and beyond
+const ROSTER_SHEET_NAME = 'Schedule';
 const MEMBERS_SHEET_NAME = 'Members';
 const LYRICS_SHEET_NAME  = 'Lyrics';
 const PORTAL_NOTICE      = '⚠️  Please use the JAG App to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/JAG-App';
@@ -404,6 +404,18 @@ function deleteLyric(rowIndex) {
 
 // ---- Migrations ----
 
+// Renames the "Roster" sheet tab to "Schedule". Idempotent — safe to re-run.
+function migrateSchemaToV134() {
+  const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Roster');
+  if (sheet) {
+    sheet.setName('Schedule');
+    _clearDataCache();
+    return 'Renamed Roster → Schedule';
+  }
+  return 'Roster tab not found — may already be renamed';
+}
+
 // Adds "Last Updated" column to Members (col J) and Lyrics (col C).
 // Idempotent — safe to re-run.
 function migrateSchemaToV133() {
@@ -493,7 +505,7 @@ function formatSheets() {
 
 function _formatRosterSheet(ss) {
   const sheet = ss.getSheetByName(ROSTER_SHEET_NAME);
-  if (!sheet) { Logger.log('Roster sheet not found.'); return; }
+  if (!sheet) { Logger.log(ROSTER_SHEET_NAME + ' sheet not found.'); return; }
 
   // Auto-detect layout: if row 1 has no recognized column headers, it's the notice row (post-migration)
   const row1vals     = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -587,7 +599,7 @@ function _formatRosterSheet(ss) {
     sheet.setRowHeight(1, 48);
   }
 
-  Logger.log('Roster sheet formatted (' + dataColCount + ' data columns, ' + (hasNoticeRow ? 'post' : 'pre') + '-migration).');
+  Logger.log(ROSTER_SHEET_NAME + ' sheet formatted (' + dataColCount + ' data columns, ' + (hasNoticeRow ? 'post' : 'pre') + '-migration).');
 }
 
 function _formatMembersSheet(ss) {
@@ -669,7 +681,8 @@ function _formatMembersSheet(ss) {
   if (luIdx >= 0) {
     sheet.getRange(headerRow, luIdx + 1).setNote('Auto-stamped on every save — do not edit.');
     sheet.getRange(dataStartRow, luIdx + 1, dataRows, 1)
-      .setNumberFormat('dd/mm/yyyy hh:mm');
+      .setNumberFormat('dd/mm/yyyy hh:mm')
+      .clearDataValidations(); // prevent checkbox inherited from adjacent column
   }
 
   Logger.log('Members sheet formatted (' + DATA_COL_COUNT + ' data columns, ' + (hasNoticeRow ? 'post' : 'pre') + '-migration).');
@@ -689,6 +702,11 @@ function _formatLyricsSheet(ss) {
 
   // --- Freeze header row ---
   sheet.setFrozenRows(1);
+
+  // --- Header row: bold + background to match other sheets ---
+  sheet.getRange(1, 1, 1, DATA_COL_COUNT)
+    .setFontWeight('bold')
+    .setBackground('#ede9fe');
 
   // --- Last Updated: header note + datetime format ---
   const headers = sheet.getRange(1, 1, 1, DATA_COL_COUNT).getValues()[0];
