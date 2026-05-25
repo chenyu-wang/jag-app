@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.38.0 (2026-05-25)
+// Version: 1.39.0 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.38.0';
+const VERSION      = '1.39.0';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -48,15 +48,44 @@ function getAllData() {
 
   // B: open spreadsheet once and share it — avoids two separate openById calls
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const rosterResult = getRosterEntries(ss);
   const data = {
-    entries:     getRosterEntries(ss),
-    members:     getMembers(ss),
-    lyrics:      getLyrics(ss),
-    version:     VERSION,
-    versionDate: VERSION_DATE
+    entries:      rosterResult.list,
+    hasMorePast:  rosterResult.hasMorePast,
+    hasMoreFuture: rosterResult.hasMoreFuture,
+    members:      getMembers(ss),
+    lyrics:       getLyrics(ss),
+    version:      VERSION,
+    versionDate:  VERSION_DATE
   };
   try { cache.put('allData', JSON.stringify(data), 60); } catch(e) {} // 60s TTL; silent if >100KB
   return data;
+}
+
+// Load a 1-year chunk of entries adjacent to the current loaded window.
+// direction: 'past' | 'future'
+// boundaryISO: earliest loaded date (for 'past') or latest loaded date (for 'future')
+function loadMoreRosterEntries(direction, boundaryISO) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const tz = Session.getScriptTimeZone();
+  const boundary = new Date(boundaryISO + 'T00:00:00');
+  let startISO, endISO;
+  if (direction === 'past') {
+    const newEnd = new Date(boundary);
+    newEnd.setDate(newEnd.getDate() - 1);
+    const newStart = new Date(boundary);
+    newStart.setFullYear(newStart.getFullYear() - 1);
+    startISO = Utilities.formatDate(newStart, tz, 'yyyy-MM-dd');
+    endISO   = Utilities.formatDate(newEnd,   tz, 'yyyy-MM-dd');
+  } else {
+    const newStart = new Date(boundary);
+    newStart.setDate(newStart.getDate() + 1);
+    const newEnd = new Date(boundary);
+    newEnd.setFullYear(newEnd.getFullYear() + 1);
+    startISO = Utilities.formatDate(newStart, tz, 'yyyy-MM-dd');
+    endISO   = Utilities.formatDate(newEnd,   tz, 'yyyy-MM-dd');
+  }
+  return getRosterEntries(ss, startISO, endISO);
 }
 
 function _normalizeStr(s) { return String(s == null ? '' : s).toLowerCase().trim(); }
@@ -86,23 +115,39 @@ function _rosterColMap(headers) {
   return m;
 }
 
-function getRosterEntries(ss) {
+// startISO / endISO: 'yyyy-MM-dd' window (inclusive). Defaults to ±1 year from today.
+// Returns {list, hasMorePast, hasMoreFuture}.
+function getRosterEntries(ss, startISO, endISO) {
+  const tz = Session.getScriptTimeZone();
+  if (!startISO || !endISO) {
+    const now = new Date();
+    const s = new Date(now); s.setFullYear(s.getFullYear() - 1);
+    const e = new Date(now); e.setFullYear(e.getFullYear() + 1);
+    if (!startISO) startISO = Utilities.formatDate(s, tz, 'yyyy-MM-dd');
+    if (!endISO)   endISO   = Utilities.formatDate(e, tz, 'yyyy-MM-dd');
+  }
+
   const sheet = (ss || SpreadsheetApp.openById(SPREADSHEET_ID)).getSheetByName(SCHEDULE_SHEET_NAME);
-  if (!sheet || sheet.getLastRow() <= 1) return [];
+  if (!sheet || sheet.getLastRow() <= 1) return {list: [], hasMorePast: false, hasMoreFuture: false};
 
   const data = sheet.getDataRange().getValues();
   // Auto-detect header row: if row 1 has no recognized column names, it's the notice row
   const firstRowMap  = _rosterColMap(data[0]);
   const headerRowIdx = Object.keys(firstRowMap).length > 0 ? 0 : 1;
   const col          = headerRowIdx === 0 ? firstRowMap : _rosterColMap(data[headerRowIdx]);
-  const tz   = Session.getScriptTimeZone();
   const g    = function(row, key) { return col[key] !== undefined ? row[col[key]] : ''; };
-  const entries = [];
+  const list = [];
+  let hasMorePast   = false;
+  let hasMoreFuture = false;
 
   for (let i = headerRowIdx + 1; i < data.length; i++) {
     const row = data[i];
     if (!g(row, 'date')) continue;
     const dateObj = new Date(g(row, 'date'));
+    const dateISO = Utilities.formatDate(dateObj, tz, 'yyyy-MM-dd');
+
+    if (dateISO < startISO) { hasMorePast   = true; continue; }
+    if (dateISO > endISO)   { hasMoreFuture = true; continue; }
 
     const rawUpdatedAt = g(row, 'updatedAt');
     const rawTime      = g(row, 'time');
@@ -111,9 +156,9 @@ function getRosterEntries(ss) {
     const timeStr      = rawTime instanceof Date
                          ? Utilities.formatDate(rawTime, tz, 'HH:mm')
                          : String(rawTime || '');
-    entries.push({
+    list.push({
       rowIndex:    i + 1,
-      date:        Utilities.formatDate(dateObj, tz, 'yyyy-MM-dd'),
+      date:        dateISO,
       group:       String(g(row, 'group')       || ''),
       eventType:   String(g(row, 'eventType')   || ''),
       venue:       String(g(row, 'venue')       || ''),
@@ -129,7 +174,7 @@ function getRosterEntries(ss) {
     });
   }
 
-  return entries;
+  return {list, hasMorePast, hasMoreFuture};
 }
 
 function getMembers(ss) {

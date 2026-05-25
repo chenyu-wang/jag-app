@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.38.0 (2026-05-25) -->
+  <!-- Version: 1.39.0 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -250,6 +250,9 @@ let _dupFirstNamesCache  = null;  // F: invalidated whenever allMembers changes
 let _activeCache         = null;  // invalidated whenever allMembers changes
 let _loadGen = 0;               // incremented on each loadData() call; stale responses are discarded
 let attendanceCache = {};        // keyed by 'YYYY-MM-DD' (combined) or 'YYYY-MM-DD:GROUP' (separated); value: Set<memberName>
+let _hasMorePast        = false; // true when the sheet has entries before the loaded window
+let _hasMoreFuture      = false; // true when the sheet has entries after the loaded window
+let _loadingMoreEntries = false; // prevents concurrent load-more calls
 
 // HTML-escape any string before inserting into innerHTML.
 function _esc(s) {
@@ -262,9 +265,11 @@ function _esc(s) {
 // =============================================
 document.addEventListener('DOMContentLoaded', function() {
   if (_INITIAL_DATA) {
-    allEntries = _INITIAL_DATA.entries || [];
-    allMembers = _INITIAL_DATA.members || [];
-    allLyrics  = _INITIAL_DATA.lyrics  || [];
+    allEntries      = _INITIAL_DATA.entries || [];
+    allMembers      = _INITIAL_DATA.members || [];
+    allLyrics       = _INITIAL_DATA.lyrics  || [];
+    _hasMorePast    = !!_INITIAL_DATA.hasMorePast;
+    _hasMoreFuture  = !!_INITIAL_DATA.hasMoreFuture;
     _scheduleDatesCache = null;
     _entriesByDateCache = null;
     _dupFirstNamesCache = null;
@@ -307,9 +312,11 @@ function loadData() {
   google.script.run
     .withSuccessHandler(function(data) {
       if (gen !== _loadGen) return;  // stale response — a newer loadData() already fired
-      allEntries = data.entries || [];
-      allMembers = data.members || [];
-      allLyrics  = data.lyrics  || [];
+      allEntries     = data.entries || [];
+      allMembers     = data.members || [];
+      allLyrics      = data.lyrics  || [];
+      _hasMorePast   = !!data.hasMorePast;
+      _hasMoreFuture = !!data.hasMoreFuture;
       _scheduleDatesCache = null;  // D: invalidate on fresh data
       _entriesByDateCache = null;
       _dupFirstNamesCache = null;  // F: invalidate on fresh data
@@ -491,10 +498,20 @@ function renderHome(resetWindow) {
   const upcomingDateStr = toISODate(fridays[upcomingIdx]);
 
   if (startIdx === 0) {
-    const tip = document.createElement('div');
-    tip.style.cssText = 'text-align:center;padding:10px 0 4px;font-size:.75rem;color:#94a3b8;';
-    tip.textContent = 'Beginning of schedule';
-    c.appendChild(tip);
+    if (_hasMorePast) {
+      const btn = document.createElement('button');
+      btn.id = 'load-earlier-btn';
+      btn.className = 'add-lyric-btn';
+      btn.style.marginBottom = '8px';
+      btn.textContent = 'Load 1 year earlier';
+      btn.onclick = function() { _loadMoreEntries('past'); };
+      c.appendChild(btn);
+    } else {
+      const tip = document.createElement('div');
+      tip.style.cssText = 'text-align:center;padding:10px 0 4px;font-size:.75rem;color:#94a3b8;';
+      tip.textContent = 'Beginning of schedule';
+      c.appendChild(tip);
+    }
   }
 
   if (!_entriesByDateCache) {
@@ -535,10 +552,20 @@ function renderHome(resetWindow) {
   });
 
   if (endIdx === fridays.length - 1) {
-    const tip = document.createElement('div');
-    tip.style.cssText = 'text-align:center;padding:4px 0 10px;font-size:.75rem;color:#94a3b8;';
-    tip.textContent = 'End of schedule';
-    c.appendChild(tip);
+    if (_hasMoreFuture) {
+      const btn = document.createElement('button');
+      btn.id = 'load-later-btn';
+      btn.className = 'add-lyric-btn';
+      btn.style.marginTop = '8px';
+      btn.textContent = 'Load 1 year later';
+      btn.onclick = function() { _loadMoreEntries('future'); };
+      c.appendChild(btn);
+    } else {
+      const tip = document.createElement('div');
+      tip.style.cssText = 'text-align:center;padding:4px 0 10px;font-size:.75rem;color:#94a3b8;';
+      tip.textContent = 'End of schedule';
+      c.appendChild(tip);
+    }
   }
 
   // Only auto-scroll to upcoming on a fresh render (not when extending the window)
@@ -553,6 +580,46 @@ function renderHome(resetWindow) {
       contentEl.scrollTop = elTop - (viewH / 2) + (elHeight / 2);
     });
   }
+}
+
+function _loadMoreEntries(direction) {
+  if (_loadingMoreEntries) return;
+  _loadingMoreEntries = true;
+  const btnId = direction === 'past' ? 'load-earlier-btn' : 'load-later-btn';
+  const btn = document.getElementById(btnId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+
+  const sorted = allEntries.map(e => e.date).sort();
+  const boundaryISO = direction === 'past'
+    ? (sorted[0] || toISODate(today()))
+    : (sorted[sorted.length - 1] || toISODate(today()));
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      _loadingMoreEntries = false;
+      if (result && result.list && result.list.length > 0) {
+        if (direction === 'past') {
+          allEntries   = result.list.concat(allEntries);
+          _hasMorePast = result.hasMorePast;
+          dashPast += result.list.length;
+        } else {
+          allEntries    = allEntries.concat(result.list);
+          _hasMoreFuture = result.hasMoreFuture;
+        }
+      } else {
+        if (direction === 'past') _hasMorePast   = false;
+        else                      _hasMoreFuture = false;
+      }
+      _scheduleDatesCache = null;
+      _entriesByDateCache = null;
+      renderHome(false);
+    })
+    .withFailureHandler(function(err) {
+      _loadingMoreEntries = false;
+      console.error('loadMoreRosterEntries failed:', err);
+      renderHome(false);
+    })
+    .loadMoreRosterEntries(direction, boundaryISO);
 }
 
 function buildEventCard(friday, entries, isPast, isUpcoming) {
@@ -1658,11 +1725,19 @@ function getNextFriday() {
 // Returns every Friday from Jan 1 of the current year through Dec 31 of next year.
 // Covers current year + 3 ahead so the app stays useful well beyond any single year.
 function getFridaysRange() {
-  const startYear = new Date().getFullYear();
-  const endYear   = startYear + 3;
-  const fridays   = [];
+  const todayYear = new Date().getFullYear();
+  let startYear = todayYear - 1;
+  let endYear   = todayYear + 3;
+  // Extend to cover all loaded entries
+  allEntries.forEach(function(e) {
+    const y = parseInt(e.date.split('-')[0], 10);
+    if (!isNaN(y)) {
+      if (y < startYear) startYear = y;
+      if (y > endYear)   endYear   = y;
+    }
+  });
+  const fridays = [];
   let d = new Date(startYear, 0, 1);
-  // Advance to first Friday
   while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
   while (d.getFullYear() <= endYear) {
     fridays.push(new Date(d));

@@ -153,6 +153,13 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.37.2 | Replace birthday year `<input type="number">` with a `<select>` (1960–2010) for consistent look/feel with Month and Day selects | n/a |
 | v1.37.3 | Birthday year select expanded to current year → 1900 (no hard limit) | n/a |
 | v1.37.4 | Add search to Members view — same style/pattern as Lyrics search; filters by name, group, roleType; preserves query across save/delete | n/a |
+| v1.37.5 | Birthday reminder window changed to -2 days to +14 days from event Friday | n/a |
+| v1.37.6 | Fix iOS home bar covering bottom nav: `viewport-fit=cover` + `env(safe-area-inset-bottom)` on `#bottom-nav` and `#content` padding | n/a |
+| v1.37.7 | Increase bottom content padding to 100px (was 60px) to prevent cards hiding behind home bar | n/a |
+| v1.37.8 | Reorder birthday selects to Day / Month / Year (Optional) | n/a |
+| v1.37.9 | Increase nav tab padding to 12px top / 14px bottom so tab text is not obscured by iOS home bar | n/a |
+| v1.38.0 | Birthday reminder window changed to ±7 days (last LG to next LG) | n/a |
+| v1.39.0 | Schedule entries limited to ±1 year from today; `getRosterEntries` returns `{list,hasMorePast,hasMoreFuture}`; new `loadMoreRosterEntries(direction,boundaryISO)` GAS function; Load Earlier / Load Later buttons appear when more entries exist outside the loaded window; `getFridaysRange` extended dynamically to cover all loaded entry dates | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
