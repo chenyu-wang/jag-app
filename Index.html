@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.37.2 (2026-05-25) -->
+  <!-- Version: 1.37.3 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1535,8 +1535,9 @@ function _bdaySelects(birthday) {
     return '<option value="' + v + '"' + (curD === v ? ' selected' : '') + '>' + (i + 1) + '</option>';
   }).join('');
   const curYear = parseInt(curY, 10) || 0;
-  const yOpts = '<option value="">Year</option>' + Array.from({length: 51}, function(_, i) {
-    const yr = 2010 - i;
+  const thisYear = new Date().getFullYear();
+  const yOpts = '<option value="">Year</option>' + Array.from({length: thisYear - 1899}, function(_, i) {
+    const yr = thisYear - i;
     return '<option value="' + yr + '"' + (curYear === yr ? ' selected' : '') + '>' + yr + '</option>';
   }).join('');
   return '<select id="m-bday-month" style="background:#fff;color:#1e293b;">' + mOpts + '</select>'
