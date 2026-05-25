@@ -137,6 +137,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.32.8 | Fix event time display: read time using script timezone (not UTC) so Perth 18:30 reads back as 18:30; set time cell to plain text format before each save to prevent Sheets auto-converting string to Date | n/a |
 | v1.32.9 | Fix Separated LG attendee panel and share message excluding `group=Both` members (e.g. Steph); use `groupMatch` instead of exact `m.group === grp` filter in both places | n/a |
 | v1.33.0 | Add Last Updated timestamp to Members (col J) and Lyrics (col C); shown on member and lyric cards | `migrateSchemaToV133()` |
+| v1.33.1 | Update `_formatMembersSheet` to 10 cols + Last Updated datetime format; add `_formatLyricsSheet` with widths, banding, datetime format; wire into `formatSheets()` | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Roster tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.

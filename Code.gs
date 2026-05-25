@@ -1,10 +1,10 @@
 // ============================================================
 // JAG Life Group Roster - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.33.0 (2026-05-25)
+// Version: 1.33.1 (2026-05-25)
 // ============================================================
 
-const VERSION      = '1.33.0';
+const VERSION      = '1.33.1';
 const VERSION_DATE = '2026-05-25';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -487,6 +487,7 @@ function formatSheets() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   _formatRosterSheet(ss);
   _formatMembersSheet(ss);
+  _formatLyricsSheet(ss);
   Logger.log('formatSheets complete.');
 }
 
@@ -602,10 +603,10 @@ function _formatMembersSheet(ss) {
 
   const maxRows        = sheet.getMaxRows();
   const dataRows       = maxRows - dataStartRow + 1;
-  const DATA_COL_COUNT = 9; // Members schema is always 9 columns
+  const DATA_COL_COUNT = 10; // Members schema: 10 columns (A–J)
 
   // --- Column widths (positional, matches Members schema order) ---
-  [160, 70, 105, 80, 110, 90, 70, 90, 80].forEach(function(w, i) {
+  [160, 70, 105, 80, 110, 90, 70, 90, 80, 145].forEach(function(w, i) {
     sheet.setColumnWidth(i + 1, w);
   });
 
@@ -663,7 +664,50 @@ function _formatMembersSheet(ss) {
     sheet.setRowHeight(1, 48);
   }
 
+  // --- Last Updated: header note ---
+  const luIdx = lower.indexOf('last updated');
+  if (luIdx >= 0) {
+    sheet.getRange(headerRow, luIdx + 1).setNote('Auto-stamped on every save — do not edit.');
+    sheet.getRange(dataStartRow, luIdx + 1, dataRows, 1)
+      .setNumberFormat('dd/mm/yyyy hh:mm');
+  }
+
   Logger.log('Members sheet formatted (' + DATA_COL_COUNT + ' data columns, ' + (hasNoticeRow ? 'post' : 'pre') + '-migration).');
 }
 
+function _formatLyricsSheet(ss) {
+  const sheet = ss.getSheetByName(LYRICS_SHEET_NAME);
+  if (!sheet) { Logger.log('Lyrics sheet not found.'); return; }
+
+  const DATA_COL_COUNT = 3; // Lyrics schema: 3 columns (A–C)
+  const dataStartRow   = 2;
+  const maxRows        = sheet.getMaxRows();
+  const dataRows       = Math.max(1, maxRows - dataStartRow + 1);
+
+  // --- Column widths ---
+  [280, 90, 145].forEach(function(w, i) { sheet.setColumnWidth(i + 1, w); });
+
+  // --- Freeze header row ---
+  sheet.setFrozenRows(1);
+
+  // --- Last Updated: header note + datetime format ---
+  const headers = sheet.getRange(1, 1, 1, DATA_COL_COUNT).getValues()[0];
+  const lower   = headers.map(_normalizeStr);
+  const luIdx   = lower.indexOf('last updated');
+  if (luIdx >= 0) {
+    sheet.getRange(1, luIdx + 1).setNote('Auto-stamped on every save — do not edit.');
+    sheet.getRange(dataStartRow, luIdx + 1, dataRows, 1)
+      .setNumberFormat('dd/mm/yyyy hh:mm');
+  }
+
+  // --- Alternating row colours ---
+  sheet.getBandings().forEach(function(b) { b.remove(); });
+  sheet.getRange(dataStartRow, 1, dataRows, DATA_COL_COUNT).clearFormat();
+  sheet.getRange(dataStartRow, 1, dataRows, DATA_COL_COUNT)
+    .applyRowBanding()
+    .setFirstRowColor('#f5f3ff')
+    .setSecondRowColor('#ffffff');
+
+  Logger.log('Lyrics sheet formatted.');
+}
 
