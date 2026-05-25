@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <!-- Version: 1.36.2 (2026-05-25) -->
+  <!-- Version: 1.36.3 (2026-05-25) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="JAG App" />
-  <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAIAAACyr5FlAAACOklEQVR42u3dSW6EQAxAUd+1pdw/J+hk2wN0TZBgv9JfIpBcb4EAibifuG5f35rszP0KCKA5A4cdSqYkmKDkEBw2IDeRwAKRlTjMuoiPwAKRBThMtpqPIIOPKRymWdNHkMHHIA4TrOwjyOCjG4ep8RFkaMsHHOrBYVJ8vMdhRnzAoU4cpiM41InDXPTkAw7BoWEcJqJXH3AIDo3hMAu99QGH4BAcgkNwCA7BoavhMAVtBYfgEByCQ3AIDsEhOASH4BAcEhyCQ3AIDsEhOASH4BAcgkOCQ3AIDsEhOASH4BAcgkNwSHAIDsEhOASH4BAcgkNw/H33hvX/zwAHHHDAAQcccFwVyqojt46fPwMccMABBxxwwAHHehxuSOGAAw444ICjOo7etX+tfA/E4IADDjjggKMujpaN8RAMDjjggAMOOOCAAw444IADDjjgyPKB8dE4fGAMBxxwwAEHHHVfvAkOwSE4BIfgEByCQ4JDcAgOwSE4BIfgEByCQ3AIDgkOwSE4BIfgEByCQ3AIDsEhwSE4BIfgEByCQ3AIDsEhOCQ4tIcj/Z9zNdYvDDgEh+AQHIJDcAgOXRAHH3qVAYfg0AwOPvQkAw7BoUkcfOj2+DNUONSGgw8y4NAQDj7I2MPBBxlwaAgHH2Ts4eCjuIwPOPioLOMzDj7KymjCwUdNGa04+CgoowMHH9Vk9OHgo5SMbhyIFGExjoOPCjLGcSCSm8UCHIhkZbEMByXJTByCg5IcJo7FAc21EGytH8KLkMHbCdGrAAAAAElFTkSuQmCC" />
+  <link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/gh/chenyu-wang/jag-app@main/icon.png" />
   <style>
     /* ---- Reset & Base ---- */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2344,44 +2344,10 @@ function showToast(msg) {
 }
 
 // =============================================
-// PWA manifest + home screen icon (canvas-rendered PNG)
+// PWA manifest
 // =============================================
 (function() {
-  const size = 512, r = 80;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d');
-
-  // Rounded-rect background (#6366f1 indigo)
-  ctx.beginPath();
-  ctx.moveTo(r, 0); ctx.lineTo(size - r, 0);
-  ctx.arcTo(size, 0, size, r, r);
-  ctx.lineTo(size, size - r);
-  ctx.arcTo(size, size, size - r, size, r);
-  ctx.lineTo(r, size);
-  ctx.arcTo(0, size, 0, size - r, r);
-  ctx.lineTo(0, r);
-  ctx.arcTo(0, 0, r, 0, r);
-  ctx.closePath();
-  ctx.fillStyle = '#6366f1';
-  ctx.fill();
-
-  // "JAG" text — bold white centered
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '800 230px system-ui, -apple-system, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText('JAG', size / 2, 350);
-
-  const iconUrl = canvas.toDataURL('image/png');
-
-  // Apple touch icon (iOS home screen — must be PNG)
-  const touchIcon = document.querySelector('link[rel="apple-touch-icon"]') || document.createElement('link');
-  touchIcon.rel  = 'apple-touch-icon';
-  touchIcon.href = iconUrl;
-  if (!touchIcon.parentNode) document.head.appendChild(touchIcon);
-
-  // Web app manifest (Android/Chrome PWA)
+  const iconUrl = 'https://cdn.jsdelivr.net/gh/chenyu-wang/jag-app@main/icon.png';
   const manifest = {
     name: 'JAG App',
     short_name: 'JAG App',
@@ -2390,8 +2356,7 @@ function showToast(msg) {
     background_color: '#6366f1',
     theme_color: '#6366f1',
     icons: [
-      { src: iconUrl, sizes: '512x512', type: 'image/png', purpose: 'any' },
-      { src: iconUrl, sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+      { src: iconUrl, sizes: '180x180', type: 'image/png', purpose: 'any maskable' }
     ]
   };
   const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
