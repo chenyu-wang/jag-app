@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.44.2 (2026-05-26) -->
+  <!-- Version: 1.44.3 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -2756,8 +2756,10 @@ function closeModal(event) {
   function _noScroll(e) { e.preventDefault(); }
   var hdr = document.querySelector('header');
   var nav = document.getElementById('bottom-nav');
+  var fab = document.getElementById('fab-add');
   if (hdr) hdr.addEventListener('touchmove', _noScroll, {passive: false});
   if (nav) nav.addEventListener('touchmove', _noScroll, {passive: false});
+  if (fab) fab.addEventListener('touchmove', _noScroll, {passive: false});
 
   // Modal overlay: block all scroll outside #modal-box;
   // inside #modal-box clamp at scroll boundaries so body never rubber-bands.
