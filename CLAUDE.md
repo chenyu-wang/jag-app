@@ -175,6 +175,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.43.5 | Fix missing dash bar: replace `background-clip` approach with `::before` pseudo-element (24px touch target, 4px visual bar); revert body overflow (unreliable on iOS); add `overscroll-behavior:none` to `#content`; fix listener leak via `touchcancel` handlers; set `box.overflowY='hidden'` on modal drag start so iOS doesn't claim the gesture | n/a |
 | v1.43.6 | Dash bar closer to top: modal-box padding-top 20→6px; handle `align-items:flex-start; padding-top:6px`; form handle moved above form-wrap card; `_formMove` self-heals if leaked (`currentView!=='add'`); JS overscroll prevention on `#content` for pre-iOS 16 | n/a |
 | v1.43.7 | UX: schedule edit bar back inside form-wrap (same as modal style); prevent touchmove on `<header>` and `#bottom-nav`; prevent touchmove on `#modal-overlay` backdrop (allow inside `#modal-box`); fix overscroll boundary to `< 1` for floating-point safety | n/a |
+| v1.44.0 | Native-app polish: remove iOS tap flash (`-webkit-tap-highlight-color:transparent`); `font-size:16px` on all inputs/selects to prevent iOS zoom-on-focus; `user-select:none` on UI chrome; `touch-action:manipulation` on all interactive elements; 0.18s fade-in view transition on tab switch; card press feedback (scale 0.985 + btn opacity) | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.

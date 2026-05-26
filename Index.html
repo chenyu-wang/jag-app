@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.43.7 (2026-05-26) -->
+  <!-- Version: 1.44.0 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -199,6 +199,33 @@
     .lyrics-search:focus { border-color: #6366f1; }
     .add-lyric-btn { width: 100%; padding: 11px; border: 2px dashed #e2e8f0; border-radius: 10px; background: none; color: #6366f1; font-weight: 700; font-size: .875rem; cursor: pointer; transition: border-color .15s; margin-top: 4px; }
     .add-lyric-btn:hover { border-color: #6366f1; }
+
+    /* ---- Native-app polish ---- */
+    /* 1. Remove iOS tap flash on every touch */
+    * { -webkit-tap-highlight-color: transparent; }
+
+    /* 2. Prevent iOS from zooming in when tapping form inputs (requires ≥16px) */
+    input, select, textarea { font-size: 16px !important; }
+
+    /* 3. No accidental text selection on UI chrome */
+    button, a, nav, header, label,
+    .section-heading, .form-title, .event-badge,
+    .date-label, .date-sub, .card-footer, .modal-close-btn { user-select: none; -webkit-user-select: none; }
+
+    /* 4. Faster taps + disable double-tap zoom on interactive elements */
+    button, a, input, select, textarea, label,
+    .date-card, .member-card, .lyric-card, .unscheduled-card,
+    .nav-btn, .fab, .share-btn, .edit-btn, .btn { touch-action: manipulation; }
+
+    /* 5. View-switch fade-in animation */
+    @keyframes _viewIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+    #content.view-enter { animation: _viewIn 0.18s ease-out both; }
+
+    /* 6. Card press feedback */
+    .date-card, .member-card, .lyric-card, .unscheduled-card { transition: transform 0.08s ease; }
+    .date-card:active, .member-card:active, .lyric-card:active, .unscheduled-card:active { transform: scale(0.985); }
+    .btn:active   { transform: scale(0.96); }
+    .share-btn:active, .edit-btn:active { opacity: 0.7; }
   </style>
 </head>
 <body>
@@ -448,6 +475,12 @@ function showView(view) {
   } else if (view === 'lyrics') {
     renderLyrics();
     document.getElementById('content').scrollTop = 0;
+  }
+  if (view !== 'add') {
+    var _c = document.getElementById('content');
+    _c.classList.remove('view-enter');
+    void _c.offsetWidth;
+    _c.classList.add('view-enter');
   }
 }
 
