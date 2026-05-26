@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.45.0 (2026-05-26) -->
+  <!-- Version: 1.45.1 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -852,9 +852,7 @@ function renderAdd(prefillDate) {
 
   const wrap = document.createElement('div');
   wrap.innerHTML = `
-    <div style="font-weight:700;font-size:1rem;margin-bottom:${isEdit ? '4px' : '16px'};">
-      <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>${titleText}
-    </div>
+    <div style="font-weight:700;font-size:1rem;margin-bottom:${isEdit ? '4px' : '16px'};">${titleText}</div>
     ${isEdit ? `<div style="font-size:.75rem;color:#64748b;margin-bottom:16px;">🕒 Last updated: ${formatUpdatedAt(editingEntries.map(e=>e.updatedAt).filter(Boolean).sort().pop()||'') || '—'}</div>` : ''}
 
     <div class="field-row">
@@ -890,8 +888,8 @@ function renderAdd(prefillDate) {
 
     <div id="form-sections"></div>
 
-    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-      <button class="btn btn-primary" onclick="submitForm()">Save & Copy</button>
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9;">
+      <button class="btn btn-primary" onclick="submitForm()">${_saveLabel(defaultType)}</button>
       ${deleteBtn}
       <button class="btn btn-secondary" onclick="editingEntries=[];closeModal()">Cancel</button>
     </div>
@@ -925,8 +923,14 @@ function onDateChange(val) {
   rebuildSections(suggested);
 }
 
+function _saveLabel(t) {
+  return (t === 'Cancelled' || t === 'Replaced' || t === 'Special') ? 'Save' : 'Save & Copy';
+}
+
 function onTypeChange(val) {
   rebuildSections(val);
+  const btn = document.querySelector('#modal-box .btn-primary');
+  if (btn && !btn.disabled) btn.textContent = _saveLabel(val);
 }
 
 function rebuildSections(eventType) {
@@ -1430,10 +1434,11 @@ function buildMemberCard(m) {
       <div class="member-roles">${chipsHtml || '<span style="color:#94a3b8;font-size:.7rem;">No roles assigned</span>'}</div>
       <div style="font-size:.65rem;color:#94a3b8;margin-top:3px;">${m.updatedAt ? 'Updated ' + formatUpdatedAt(m.updatedAt) : '—'}</div>
     </div>
-    <button class="member-edit" onclick="openMemberForm(${encodeEntries(m)})">
+    <button class="member-edit" onclick="event.stopPropagation();openMemberForm(${encodeEntries(m)})">
       <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
     </button>
   `;
+  card.onclick = function() { openMemberForm(m); };
 
   return card;
 }
@@ -2325,7 +2330,8 @@ function _setFormSaving(saving) {
   const btn = document.querySelector('#modal-box .btn-primary');
   if (!btn) return;
   btn.disabled = saving;
-  btn.textContent = saving ? 'Saving…' : 'Save & Copy';
+  const t = document.getElementById('f-type');
+  btn.textContent = saving ? 'Saving…' : _saveLabel(t ? t.value : '');
 }
 
 function _setModalSaving(saving, text) {
@@ -2430,8 +2436,9 @@ function buildLyricCard(lyric) {
   const editBtn = document.createElement('button');
   editBtn.className = 'lyric-edit';
   editBtn.innerHTML = '<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>';
-  editBtn.onclick = function() { openLyricForm(lyric); };
+  editBtn.onclick = function(e) { e.stopPropagation(); openLyricForm(lyric); };
 
+  card.onclick = function() { openLyricForm(lyric); };
   card.appendChild(name);
   card.appendChild(count);
   card.appendChild(editBtn);

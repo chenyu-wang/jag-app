@@ -183,6 +183,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.44.5 | Fix Separated LG showing "Updated" timestamp twice — removed per-group `updatedAt` line from `gr.innerHTML`; footer timestamp (via `buildCardFooter`) remains as single source | n/a |
 | v1.44.6 | Full-width drag target on all handles: `.modal-handle` width `calc(100%+32px)` + `margin:0 -16px` so entire top strip triggers drag; visual bar kept at 80px; form-handle inline margin updated to match | n/a |
 | v1.45.0 | Migrate Schedule form to modal system: `renderAdd()` now renders into `#modal-content` + opens `#modal-overlay`; remove `body.add-mode`, `.form-wrap`, `.form-title` CSS; `openEditEntries`/`openAddForDate` simplified; `fabAction` home → `openAddForDate`; `finishSave` calls `closeModal()`; `_setFormSaving` targets `#modal-box`; remove form drag-to-dismiss IIFE; remove dead `_openAttendanceModal`; `closeModal` resets `editingEntries` | n/a |
+| v1.45.1 | UX consistency: Schedule form title removes SVG icon (matches Members/Lyrics); action buttons stacked full-width (was flex row); save label dynamic — "Save" for Cancelled/Replaced/Special, "Save & Copy" for others via `_saveLabel()`; member and lyric cards fully tappable (whole card opens form, pencil stops propagation) | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
