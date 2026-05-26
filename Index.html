@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.45.2 (2026-05-26) -->
+  <!-- Version: 1.45.3 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -170,6 +170,8 @@
     /* ---- Modal ---- */
     #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 150; display: none; align-items: flex-end; }
     #modal-overlay.open { display: flex; }
+    @keyframes _modalIn { from { transform: translateY(100%); } to { transform: none; } }
+    #modal-overlay.open > #modal-box { animation: _modalIn 0.32s cubic-bezier(.22,.61,.36,1) both; }
     #modal-box { background: #fff; border-radius: 16px 16px 0 0; width: 100%; max-height: 90vh; overflow-y: auto; padding: 6px 16px 32px; position: relative; overscroll-behavior: contain; }
     .modal-close-btn { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 1.15rem; color: #94a3b8; cursor: pointer; padding: 4px 7px; line-height: 1; border-radius: 6px; z-index: 1; }
     .modal-close-btn:active { color: #1e293b; background: #f1f5f9; }
@@ -2562,8 +2564,19 @@ function openModal(html) {
 
 function closeModal(event) {
   if (event && event.target !== document.getElementById('modal-overlay')) return;
-  document.getElementById('modal-overlay').classList.remove('open');
-  editingEntries = [];
+  const overlay = document.getElementById('modal-overlay');
+  if (!overlay.classList.contains('open')) { editingEntries = []; return; }
+  const box = document.getElementById('modal-box');
+  box.style.animation = 'none';
+  box.style.transition = 'transform .25s ease';
+  box.style.transform = 'translateY(' + (window.innerHeight + 20) + 'px)';
+  setTimeout(function() {
+    overlay.classList.remove('open');
+    box.style.transform = '';
+    box.style.transition = '';
+    box.style.animation = '';
+    editingEntries = [];
+  }, 250);
 }
 
 // =============================================
@@ -2587,20 +2600,21 @@ function closeModal(event) {
     document.removeEventListener('touchcancel', _modalEnd);
     box.style.overflowY = '';
     if (_dy > 50) {
-      box.style.transition = 'transform .2s ease';
-      box.style.transform = 'translateY(100%)';
+      box.style.transition = 'transform .25s ease';
+      box.style.transform = 'translateY(' + (window.innerHeight + 20) + 'px)';
       setTimeout(function() {
         overlay.classList.remove('open');
         box.style.transform = '';
         box.style.transition = '';
+        box.style.animation = '';
         overlay.style.background = '';
         editingEntries = [];
-      }, 200);
+      }, 250);
     } else {
       box.style.transition = 'transform .25s cubic-bezier(.22,.61,.36,1)';
       box.style.transform = '';
       overlay.style.background = '';
-      setTimeout(function() { box.style.transition = ''; }, 250);
+      setTimeout(function() { box.style.transition = ''; box.style.animation = ''; }, 250);
     }
     _dy = 0;
   }
@@ -2608,8 +2622,9 @@ function closeModal(event) {
   box.addEventListener('touchstart', function(e) {
     if (!e.target.closest('.modal-handle')) return;
     _sy = e.touches[0].clientY; _dy = 0;
+    box.style.animation = 'none'; // cancel CSS open animation so JS transform takes over
     box.style.transition = 'none';
-    box.style.overflowY = 'hidden'; // prevent iOS claiming this as its scroll target
+    box.style.overflowY = 'hidden';
     document.addEventListener('touchmove', _modalMove, {passive: false});
     document.addEventListener('touchend', _modalEnd);
     document.addEventListener('touchcancel', _modalEnd);
