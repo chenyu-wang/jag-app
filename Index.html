@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.43.0 (2026-05-25) -->
+  <!-- Version: 1.43.1 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -178,7 +178,7 @@
     #modal-box { background: #fff; border-radius: 16px 16px 0 0; width: 100%; max-height: 90vh; overflow-y: auto; padding: 20px 16px 32px; position: relative; }
     .modal-close-btn { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 1.15rem; color: #94a3b8; cursor: pointer; padding: 4px 7px; line-height: 1; border-radius: 6px; z-index: 1; }
     .modal-close-btn:active { color: #1e293b; background: #f1f5f9; }
-    .modal-handle { width: 36px; height: 4px; background: #e2e8f0; border-radius: 2px; margin: 0 auto 16px; }
+    .modal-handle { width: 52px; height: 6px; background: #cbd5e1; border-radius: 3px; margin: 0 auto 16px; cursor: grab; touch-action: none; }
 
     /* ---- Misc ---- */
     .section-heading { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #94a3b8; margin: 16px 0 8px; }
@@ -839,6 +839,7 @@ function renderAdd(prefillDate) {
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <div class="form-wrap">
+      <div class="modal-handle form-handle"></div>
       <div class="form-title" style="justify-content:space-between;">
         <span style="display:flex;align-items:center;gap:8px;">
           <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
@@ -2618,6 +2619,93 @@ function closeModal(event) {
   if (event && event.target !== document.getElementById('modal-overlay')) return;
   document.getElementById('modal-overlay').classList.remove('open');
 }
+
+// =============================================
+// Drag-to-dismiss: modal (bottom sheet)
+// =============================================
+(function() {
+  const overlay = document.getElementById('modal-overlay');
+  const box     = document.getElementById('modal-box');
+  let _sy = 0, _dy = 0, _on = false;
+
+  box.addEventListener('touchstart', function(e) {
+    const handle = box.querySelector('.modal-handle');
+    if (!handle) return;
+    const rect = handle.getBoundingClientRect();
+    const t = e.touches[0];
+    if (t.clientY > rect.bottom + 44) return;
+    _sy = t.clientY; _dy = 0; _on = true;
+    box.style.transition = 'none';
+  }, {passive: true});
+
+  window.addEventListener('touchmove', function(e) {
+    if (!_on) return;
+    _dy = Math.max(0, e.touches[0].clientY - _sy);
+    box.style.transform = 'translateY(' + _dy + 'px)';
+    overlay.style.background = 'rgba(0,0,0,' + Math.max(0.05, 0.4 * (1 - _dy / 300)) + ')';
+  }, {passive: true});
+
+  window.addEventListener('touchend', function() {
+    if (!_on) return;
+    _on = false;
+    if (_dy > 90) {
+      box.style.transition = 'transform .2s ease';
+      box.style.transform = 'translateY(100%)';
+      setTimeout(function() {
+        overlay.classList.remove('open');
+        box.style.transform = '';
+        box.style.transition = '';
+        overlay.style.background = '';
+      }, 200);
+    } else {
+      box.style.transition = 'transform .25s cubic-bezier(.22,.61,.36,1)';
+      box.style.transform = '';
+      overlay.style.background = '';
+      setTimeout(function() { box.style.transition = ''; }, 250);
+    }
+    _dy = 0;
+  });
+})();
+
+// =============================================
+// Drag-to-dismiss: edit / add form
+// =============================================
+(function() {
+  let _sy = 0, _dy = 0, _on = false;
+  const content = document.getElementById('content');
+
+  document.addEventListener('touchstart', function(e) {
+    if (!e.target.classList.contains('form-handle')) return;
+    _sy = e.touches[0].clientY; _dy = 0; _on = true;
+    content.style.transition = 'none';
+  }, {passive: true});
+
+  document.addEventListener('touchmove', function(e) {
+    if (!_on) return;
+    _dy = Math.max(0, e.touches[0].clientY - _sy);
+    content.style.transform = 'translateY(' + _dy + 'px)';
+  }, {passive: true});
+
+  document.addEventListener('touchend', function() {
+    if (!_on) return;
+    _on = false;
+    if (_dy > 90) {
+      content.style.transition = 'transform .2s ease';
+      content.style.transform = 'translateY(100%)';
+      setTimeout(function() {
+        content.style.transition = '';
+        content.style.transform = '';
+        editingEntries = [];
+        showView('home');
+      }, 200);
+    } else {
+      content.style.transition = 'transform .25s cubic-bezier(.22,.61,.36,1)';
+      content.style.transform = '';
+      setTimeout(function() { content.style.transition = ''; }, 250);
+    }
+    _dy = 0;
+  });
+})();
 
 // =============================================
 // Toast
