@@ -1,11 +1,11 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.43.0 (2026-05-25)
+// Version: 1.45.2 (2026-05-26)
 // ============================================================
 
-const VERSION      = '1.43.0';
-const VERSION_DATE = '2026-05-25';
+const VERSION      = '1.45.2';
+const VERSION_DATE = '2026-05-26';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
 const SCHEDULE_SHEET_NAME = 'Schedule';
@@ -29,10 +29,6 @@ function doGet() {
     .setTitle('JAG App')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-function getVersion() {
-  return { version: VERSION, date: VERSION_DATE };
 }
 
 // ---- Data Fetching ----
@@ -258,66 +254,6 @@ function getMembers(ss) {
 
 // ---- Roster CRUD ----
 
-function saveRosterEntry(entry) {
-  try {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(SCHEDULE_SHEET_NAME);
-    if (!sheet) return { success: false, error: 'Roster sheet not found' };
-
-    const dateObj = _parseDate(entry.date);
-
-    // Read sheet once: serves both header mapping and row write.
-    // Building rowData by column position makes writes column-order agnostic —
-    // reordering columns in the sheet never breaks saves.
-    const data         = sheet.getDataRange().getValues();
-    const firstRowMap  = _rosterColMap(data[0]);
-    const headerRowIdx = Object.keys(firstRowMap).length > 0 ? 0 : 1;
-    const col          = headerRowIdx === 0 ? firstRowMap : _rosterColMap(data[headerRowIdx]);
-    const numCols      = data[headerRowIdx].length;
-
-    // Sort only when the row order can change: new row or date edited.
-    const needsSort = !entry.rowIndex || (function() {
-      const oldCell = data[entry.rowIndex - 1] && data[entry.rowIndex - 1][col.date];
-      if (!oldCell) return true;
-      return _dateChanged(new Date(oldCell), dateObj);
-    })();
-
-    const rowData = new Array(numCols).fill('');
-    const s = function(key, val) { if (col[key] !== undefined) rowData[col[key]] = val; };
-    s('date',        dateObj);
-    s('group',       entry.group);
-    s('eventType',   entry.eventType);
-    s('venue',       entry.venue       || '');
-    s('organiser',   entry.organiser   || '');
-    s('pw',          entry.pw          || '');
-    s('facilitator', entry.facilitator || '');
-    s('food',        entry.food        || '');
-    s('reporting',   entry.reporting   || '');
-    s('notes',       entry.notes       || '');
-    s('iceBreaker',  entry.iceBreaker  || '');
-    s('updatedAt',   new Date());
-    s('time',        entry.time        || '');
-    s('attendees',   entry.attendees   || '');
-
-    // Set time cell to plain text before writing so Sheets never auto-converts '18:30' to a Date.
-    const targetRow = entry.rowIndex || (sheet.getLastRow() + 1);
-    if (col.time !== undefined) sheet.getRange(targetRow, col.time + 1).setNumberFormat('@');
-    sheet.getRange(targetRow, 1, 1, numCols).setValues([rowData]);
-
-    SpreadsheetApp.flush(); // commit writes before sort so getLastColumn() sees col M
-    _clearEntriesCache();
-    if (needsSort) {
-      sortRosterSheet(sheet);
-      return { success: true };
-    }
-    return { success: true, stable: true }; // rowIndices unchanged — client can skip loadData()
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
-}
-
-// Batch version: saves all entries in one server round-trip (one sheet open, one read, one sort).
-// Always prefer this over calling saveRosterEntry in a loop.
 function saveRosterEntries(entries) {
   try {
     const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -493,38 +429,6 @@ function deleteLyric(rowIndex) {
   } catch (e) {
     return { success: false, error: e.toString() };
   }
-}
-
-// ---- One-time migrations ----
-
-// Sets Last Updated = 1 Jan 2026 for Members and Lyrics rows that have no timestamp.
-// Run once from the editor, then delete.
-function migrateSchemaToV137() {
-  const ss      = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const DEFAULT = new Date('2026-01-01T00:00:00');
-  let updated   = 0;
-
-  const mSheet = ss.getSheetByName(MEMBERS_SHEET_NAME);
-  if (mSheet) {
-    const data     = mSheet.getDataRange().getValues();
-    const startIdx = _normalizeStr(String(data[0][0])) === 'name' ? 1 : 2;
-    for (let i = startIdx; i < data.length; i++) {
-      if (!data[i][0]) continue;
-      if (!data[i][9]) { mSheet.getRange(i + 1, 10).setValue(DEFAULT); updated++; }
-    }
-  }
-
-  const lSheet = ss.getSheetByName(LYRICS_SHEET_NAME);
-  if (lSheet) {
-    const data = lSheet.getDataRange().getValues();
-    for (let i = 1; i < data.length; i++) {
-      if (!data[i][0]) continue;
-      if (!data[i][2]) { lSheet.getRange(i + 1, 3).setValue(DEFAULT); updated++; }
-    }
-  }
-
-  _clearDataCache();
-  return 'migrateSchemaToV137: ' + updated + ' rows stamped with 2026-01-01';
 }
 
 // ---- Helpers ----

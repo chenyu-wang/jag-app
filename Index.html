@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.45.1 (2026-05-26) -->
+  <!-- Version: 1.45.2 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -79,9 +79,7 @@
     /* Combined card layout */
     .shared-section { padding: 10px 14px 8px; background: #fafafe; border-bottom: 1px solid #ede9fe; }
     .shared-label { font-size: .62rem; font-weight: 800; color: #a5b4fc; text-transform: uppercase; letter-spacing: .7px; margin-bottom: 4px; }
-    .org-split { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #f1f5f9; }
-    .org-col { padding: 8px 14px; }
-    .org-col + .org-col { border-left: 1px solid #f1f5f9; }
+
     .card-footer { padding: 7px 14px 10px; border-top: 1px solid #f8fafc; display: flex; gap: 8px; align-items: center; }
     /* Separated card - tighter edit row */
     .sep-group-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
@@ -206,7 +204,7 @@
 
     /* 3. No accidental text selection on UI chrome */
     button, a, nav, header, label,
-    .section-heading, .form-title, .event-badge,
+    .section-heading, .event-badge,
     .date-label, .date-sub, .card-footer, .modal-close-btn { user-select: none; -webkit-user-select: none; }
 
     /* 4. Faster taps + disable double-tap zoom on interactive elements */
@@ -403,9 +401,8 @@ function today() {
 // Navigation
 // =============================================
 function setActiveNav(view) {
-  const navView = view === 'add' ? 'home' : view;
   ['home','members','lyrics'].forEach(v =>
-    document.getElementById('nav-' + v).classList.toggle('active', v === navView));
+    document.getElementById('nav-' + v).classList.toggle('active', v === view));
 }
 
 function _updateFab() {
@@ -507,19 +504,6 @@ function resolveDisplayName(val) {
   if (!val) return val;
   const match = allMembers.find(m => m.active && displayName(m.name) === val);
   return match ? match.name : val;
-}
-
-function timeAgo(isoStr) {
-  if (!isoStr) return '';
-  const diff = Date.now() - new Date(isoStr).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1)  return 'just now';
-  if (m < 60) return m + 'm ago';
-  const h = Math.floor(m / 60);
-  if (h < 24) return h + 'h ago';
-  const d = Math.floor(h / 24);
-  if (d < 7)  return d + 'd ago';
-  return new Date(isoStr).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Perth' });
 }
 
 function formatUpdatedAt(isoStr) {
@@ -1930,16 +1914,20 @@ function setAllAtt(state) {
   updateAttCount();
 }
 
+function _groupCombinedMembers(activeMembers) {
+  const jag1Students = activeMembers.filter(m => m.roleType === 'Student' && (m.group === 'JAG1' || m.group === 'Both'));
+  const jag2Students = activeMembers.filter(m => m.roleType === 'Student' && m.group === 'JAG2');
+  const olderSS      = activeMembers.filter(m => m.roleType === 'Older Sunday School');
+  const adults       = activeMembers.filter(m => m.roleType === 'Adult');
+  [jag1Students, jag2Students, olderSS, adults].forEach(a => a.sort((x,y) => x.name.localeCompare(y.name)));
+  return { jag1Students, jag2Students, olderSS, adults };
+}
+
 function buildAttendeePanel(date, eventType) {
   // Build groups: each group has its own cache key and optional data-group for separated LG
   const groups = [];
   if (isCombinedType(eventType)) {
-    const allActive    = allMembers.filter(m => m.active);
-    const jag1Students = allActive.filter(m => m.roleType === 'Student' && (m.group === 'JAG1' || m.group === 'Both'));
-    const jag2Students = allActive.filter(m => m.roleType === 'Student' && m.group === 'JAG2');
-    const olderSS      = allActive.filter(m => m.roleType === 'Older Sunday School');
-    const adults       = allActive.filter(m => m.roleType === 'Adult');
-    [jag1Students, jag2Students, olderSS, adults].forEach(function(a) { a.sort(function(x,y){ return x.name.localeCompare(y.name); }); });
+    const { jag1Students, jag2Students, olderSS, adults } = _groupCombinedMembers(allMembers.filter(m => m.active));
     groups.push({ label: 'JAG 1 Students',      members: jag1Students, cacheKey: date,          grpAttr: null });
     groups.push({ label: 'JAG 2 Students',      members: jag2Students, cacheKey: date,          grpAttr: null });
     groups.push({ label: 'Older Sunday School', members: olderSS,      cacheKey: date,          grpAttr: null });
@@ -2099,12 +2087,7 @@ function _buildCombinedShareText(friday, entries) {
   const entry      = entriesArr.find(e => e.group === 'Both') || entriesArr.find(e => e.group === 'JAG1') || entriesArr[0];
   const eventType  = entry.eventType || '';
 
-  const allActive    = getActiveForShare(toISODate(friday));
-  const jag1Students = allActive.filter(m => m.roleType === 'Student' && (m.group === 'JAG1' || m.group === 'Both'));
-  const jag2Students = allActive.filter(m => m.roleType === 'Student' && m.group === 'JAG2');
-  const olderSS      = allActive.filter(m => m.roleType === 'Older Sunday School');
-  const adults       = allActive.filter(m => m.roleType === 'Adult');
-  [jag1Students, jag2Students, olderSS, adults].forEach(arr => arr.sort((a, b) => a.name.localeCompare(b.name)));
+  const { jag1Students, jag2Students, olderSS, adults } = _groupCombinedMembers(getActiveForShare(toISODate(friday)));
 
   const lines = [];
 
