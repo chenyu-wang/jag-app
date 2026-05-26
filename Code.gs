@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.45.2 (2026-05-26)
+// Version: 1.45.4 (2026-05-26)
 // ============================================================
 
-const VERSION      = '1.45.2';
+const VERSION      = '1.45.4';
 const VERSION_DATE = '2026-05-26';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';

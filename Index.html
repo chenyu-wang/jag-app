@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.45.3 (2026-05-26) -->
+  <!-- Version: 1.45.4 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -297,6 +297,7 @@ let _dupFirstNamesCache  = null;  // F: invalidated whenever allMembers changes
 let _activeCache         = null;  // invalidated whenever allMembers changes
 let _loadGen = 0;               // incremented on each loadData() call; stale responses are discarded
 let attendanceCache = {};        // keyed by 'YYYY-MM-DD' (combined) or 'YYYY-MM-DD:GROUP' (separated); value: Set<memberName>
+let _modalHistoryPushed = false; // true while a modal is open and a history entry was pushed for Android back
 let _hasMorePast        = false; // true when the sheet has entries before the loaded window
 let _hasMoreFuture      = false; // true when the sheet has entries after the loaded window
 let _loadingMoreEntries = false; // prevents concurrent load-more calls
@@ -352,6 +353,13 @@ document.addEventListener('DOMContentLoaded', function() {
       requestAnimationFrame(function() { _dashBusy = false; });
     }
   });
+});
+
+window.addEventListener('popstate', function(e) {
+  if (document.getElementById('modal-overlay').classList.contains('open')) {
+    _modalHistoryPushed = false;
+    closeModal();
+  }
 });
 
 function loadData() {
@@ -885,6 +893,7 @@ function renderAdd(prefillDate) {
   mc.innerHTML = '';
   mc.appendChild(wrap);
   document.getElementById('modal-overlay').classList.add('open');
+  if (!_modalHistoryPushed) { history.pushState({jagModal:true}, ''); _modalHistoryPushed = true; }
   document.getElementById('modal-box').scrollTop = 0;
   rebuildSections(defaultType);
 }
@@ -2443,7 +2452,7 @@ function openLyricForm(lyric) {
 
     <div class="field">
       <label>Lyric Copies</label>
-      <input type="number" id="l-count" value="${l.copyCount !== undefined ? l.copyCount : ''}" placeholder="0" min="0" max="999" />
+      <input type="number" id="l-count" value="${l.copyCount !== undefined ? l.copyCount : ''}" placeholder="0" min="0" max="999" inputmode="numeric" />
     </div>
 
     <button class="btn btn-primary" onclick="submitLyric()">Save</button>
@@ -2560,12 +2569,14 @@ function _dismissInstallBanner() {
 function openModal(html) {
   document.getElementById('modal-content').innerHTML = html;
   document.getElementById('modal-overlay').classList.add('open');
+  if (!_modalHistoryPushed) { history.pushState({jagModal:true}, ''); _modalHistoryPushed = true; }
 }
 
 function closeModal(event) {
   if (event && event.target !== document.getElementById('modal-overlay')) return;
   const overlay = document.getElementById('modal-overlay');
   if (!overlay.classList.contains('open')) { editingEntries = []; return; }
+  if (_modalHistoryPushed) { history.replaceState(null, ''); _modalHistoryPushed = false; }
   const box = document.getElementById('modal-box');
   box.style.animation = 'none';
   box.style.transition = 'transform .25s ease';
@@ -2600,6 +2611,7 @@ function closeModal(event) {
     document.removeEventListener('touchcancel', _modalEnd);
     box.style.overflowY = '';
     if (_dy > 50) {
+      if (_modalHistoryPushed) { history.replaceState(null, ''); _modalHistoryPushed = false; }
       box.style.transition = 'transform .25s ease';
       box.style.transform = 'translateY(' + (window.innerHeight + 20) + 'px)';
       setTimeout(function() {
