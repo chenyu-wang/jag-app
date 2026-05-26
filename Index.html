@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.44.4 (2026-05-26) -->
+  <!-- Version: 1.44.5 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -807,8 +807,7 @@ function buildEventCard(friday, entries, isPast, isUpcoming) {
         <div class="venue-line">📖 Facilitator: <b>${entry.facilitator ? _esc(displayName(entry.facilitator)) : 'TBC'}</b></div>
         <div class="venue-line">🥘 Food: <b>${_esc(entry.food) || 'TBC'}</b></div>
         <div class="venue-line">✍️ Reporting: <b>${entry.reporting ? _esc(displayName(entry.reporting)) : 'TBC'}</b></div>
-        ${entry.notes ? `<div style="font-size:.72rem;color:#94a3b8;margin-top:3px;">📝 ${_esc(entry.notes)}</div>` : ''}
-        ${entry.updatedAt ? `<div style="font-size:.7rem;color:#94a3b8;margin-top:5px;">Updated ${formatUpdatedAt(entry.updatedAt)}</div>` : ''}`;
+        ${entry.notes ? `<div style="font-size:.72rem;color:#94a3b8;margin-top:3px;">📝 ${_esc(entry.notes)}</div>` : ''}`;
       card.appendChild(gr);
     });
 
