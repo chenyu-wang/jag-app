@@ -181,6 +181,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.44.3 | Fix FAB drag moving app: add `touchmove` prevention to `#fab-add` (the only fixed-position element missing from the scroll-lock list) | n/a |
 | v1.44.4 | Card UX: remove subtitle line from card header; solid coloured event-type badges (white text, larger); Separated LG organiser moved from field list into group header row; Combined organiser padding/border consistent with card sections | n/a |
 | v1.44.5 | Fix Separated LG showing "Updated" timestamp twice — removed per-group `updatedAt` line from `gr.innerHTML`; footer timestamp (via `buildCardFooter`) remains as single source | n/a |
+| v1.44.6 | Full-width drag target on all handles: `.modal-handle` width `calc(100%+32px)` + `margin:0 -16px` so entire top strip triggers drag; visual bar kept at 80px; form-handle inline margin updated to match | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
