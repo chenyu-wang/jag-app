@@ -169,6 +169,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.42.4 | Split `allData` cache into `allData_entries`, `allData_members`, `allData_lyrics` (3× capacity); selective invalidation — roster writes only evict entries, member writes only evict members, lyric writes only evict lyrics; `_clearDataCache()` still nukes all 3 (used by migration) | n/a |
 | v1.43.0 | New `Attendees` column in Schedule sheet (comma-separated names); attendees editable in the schedule edit form (per-group checklist for Separated LG, all members for Combined/Youth Hour); saved to sheet on submit; pre-loaded into attendanceCache on page load; share buttons on event cards now copy directly (no modal) using saved attendee data. Modal close ✕ button added to all modals. Schedule edit ✕ button in form header. Tab bar stays visible (dimmed) during edit. Lyric copies field unified with other input styling. | add `Attendees` column header to Schedule sheet |
 | v1.43.1 | Drag-to-dismiss handle on all sheets: `.modal-handle` enlarged (52×6px, darker); added to event edit/add form as `.form-handle`; touch drag-down gesture dismisses modal bottom sheet and edit form with slide-out animation | n/a |
+| v1.43.2 | UX fixes: hide bottom nav completely during edit (`display:none`); handle resized to 68×4px (longer, thinner); About modal instructions centred | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
