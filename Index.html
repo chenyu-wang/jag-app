@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.43.2 (2026-05-26) -->
+  <!-- Version: 1.43.3 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -2626,28 +2626,18 @@ function closeModal(event) {
 (function() {
   const overlay = document.getElementById('modal-overlay');
   const box     = document.getElementById('modal-box');
-  let _sy = 0, _dy = 0, _on = false;
+  let _sy = 0, _dy = 0;
 
-  box.addEventListener('touchstart', function(e) {
-    const handle = box.querySelector('.modal-handle');
-    if (!handle) return;
-    const rect = handle.getBoundingClientRect();
-    const t = e.touches[0];
-    if (t.clientY > rect.bottom + 44) return;
-    _sy = t.clientY; _dy = 0; _on = true;
-    box.style.transition = 'none';
-  }, {passive: true});
-
-  window.addEventListener('touchmove', function(e) {
-    if (!_on) return;
+  function _modalMove(e) {
     _dy = Math.max(0, e.touches[0].clientY - _sy);
     box.style.transform = 'translateY(' + _dy + 'px)';
     overlay.style.background = 'rgba(0,0,0,' + Math.max(0.05, 0.4 * (1 - _dy / 300)) + ')';
-  }, {passive: true});
+    e.preventDefault();
+  }
 
-  window.addEventListener('touchend', function() {
-    if (!_on) return;
-    _on = false;
+  function _modalEnd() {
+    window.removeEventListener('touchmove', _modalMove);
+    window.removeEventListener('touchend', _modalEnd);
     if (_dy > 90) {
       box.style.transition = 'transform .2s ease';
       box.style.transform = 'translateY(100%)';
@@ -2664,31 +2654,37 @@ function closeModal(event) {
       setTimeout(function() { box.style.transition = ''; }, 250);
     }
     _dy = 0;
-  });
+  }
+
+  box.addEventListener('touchstart', function(e) {
+    const handle = box.querySelector('.modal-handle');
+    if (!handle) return;
+    const rect = handle.getBoundingClientRect();
+    const t = e.touches[0];
+    if (t.clientY > rect.bottom + 44) return;
+    _sy = t.clientY; _dy = 0;
+    box.style.transition = 'none';
+    window.addEventListener('touchmove', _modalMove, {passive: false});
+    window.addEventListener('touchend', _modalEnd);
+  }, {passive: true});
 })();
 
 // =============================================
 // Drag-to-dismiss: edit / add form
 // =============================================
 (function() {
-  let _sy = 0, _dy = 0, _on = false;
+  let _sy = 0, _dy = 0;
   const content = document.getElementById('content');
 
-  document.addEventListener('touchstart', function(e) {
-    if (!e.target.classList.contains('form-handle')) return;
-    _sy = e.touches[0].clientY; _dy = 0; _on = true;
-    content.style.transition = 'none';
-  }, {passive: true});
-
-  document.addEventListener('touchmove', function(e) {
-    if (!_on) return;
+  function _formMove(e) {
     _dy = Math.max(0, e.touches[0].clientY - _sy);
     content.style.transform = 'translateY(' + _dy + 'px)';
-  }, {passive: true});
+    e.preventDefault();
+  }
 
-  document.addEventListener('touchend', function() {
-    if (!_on) return;
-    _on = false;
+  function _formEnd() {
+    document.removeEventListener('touchmove', _formMove);
+    document.removeEventListener('touchend', _formEnd);
     if (_dy > 90) {
       content.style.transition = 'transform .2s ease';
       content.style.transform = 'translateY(100%)';
@@ -2704,7 +2700,15 @@ function closeModal(event) {
       setTimeout(function() { content.style.transition = ''; }, 250);
     }
     _dy = 0;
-  });
+  }
+
+  document.addEventListener('touchstart', function(e) {
+    if (!e.target.classList.contains('form-handle')) return;
+    _sy = e.touches[0].clientY; _dy = 0;
+    content.style.transition = 'none';
+    document.addEventListener('touchmove', _formMove, {passive: false});
+    document.addEventListener('touchend', _formEnd);
+  }, {passive: true});
 })();
 
 // =============================================
