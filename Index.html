@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.44.6 (2026-05-26) -->
+  <!-- Version: 1.45.0 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -37,7 +37,6 @@
     .fab { position: fixed; bottom: 72px; right: 16px; width: 52px; height: 52px; border-radius: 50%; background: #6366f1; color: #fff; border: none; font-size: 1.75rem; line-height: 1; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(99,102,241,.45); z-index: 99; transition: opacity .15s, transform .15s; }
     .fab:active { transform: scale(.93); }
     .fab.hidden { opacity: 0; pointer-events: none; }
-    body.add-mode #bottom-nav { display: none; }
 
     /* ---- Cards ---- */
     .date-card { background: #fff; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); overflow: hidden; }
@@ -96,8 +95,6 @@
     .year-heading { font-size: .85rem; font-weight: 800; color: #6366f1; padding: 20px 2px 6px; letter-spacing: 1px; border-bottom: 2px solid #e0e7ff; margin-bottom: 8px; }
 
     /* ---- Forms ---- */
-    .form-wrap { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 12px; }
-    .form-title { font-weight: 700; font-size: 1rem; margin-bottom: 14px; color: #1e293b; display: flex; align-items: center; gap: 8px; }
     .form-section { border-left: 3px solid #e2e8f0; padding-left: 12px; margin-bottom: 14px; }
     .form-section.jag1 { border-color: #3b82f6; }
     .form-section.jag2 { border-color: #8b5cf6; }
@@ -420,7 +417,7 @@ function _updateFab() {
 }
 
 function fabAction() {
-  if      (currentView === 'home')    showView('add');
+  if      (currentView === 'home')    openAddForDate(toISODate(getNextFriday()));
   else if (currentView === 'members') openMemberForm(null);
   else if (currentView === 'lyrics')  openLyricForm(null);
 }
@@ -437,6 +434,7 @@ function _mergeEntriesIntoCache(savedEntries) {
 }
 
 function finishSave(msg, skipRefresh) {
+  closeModal();
   showToast(msg || 'Saved!');
   editingEntries = [];
   currentView = 'home';
@@ -459,15 +457,10 @@ function buildCardFooter(friday, entries, ts, editLabel, shareLabel) {
 }
 
 function showView(view) {
-  if (view !== 'add') document.body.classList.remove('add-mode');
   currentView = view;
   setActiveNav(view);
   _updateFab();
-  if (view === 'add') {
-    editingEntries = [];
-    renderAdd();
-    document.getElementById('content').scrollTop = 0;
-  } else if (view === 'home') {
+  if (view === 'home') {
     renderHome();
   } else if (view === 'members') {
     renderMembers();
@@ -476,18 +469,15 @@ function showView(view) {
     renderLyrics();
     document.getElementById('content').scrollTop = 0;
   }
-  if (view !== 'add') {
-    var _c = document.getElementById('content');
-    _c.classList.remove('view-enter');
-    void _c.offsetWidth;
-    _c.classList.add('view-enter');
-  }
+  var _c = document.getElementById('content');
+  _c.classList.remove('view-enter');
+  void _c.offsetWidth;
+  _c.classList.add('view-enter');
 }
 
 function renderView() {
   _updateFab();
   if      (currentView === 'home')    renderHome();
-  else if (currentView === 'add')     renderAdd();
   else if (currentView === 'members') renderMembers();
   else if (currentView === 'lyrics')  renderLyrics();
 }
@@ -838,27 +828,19 @@ function buildUnscheduledCard(friday, isUpcoming) {
 // Add / Edit View
 // =============================================
 function renderAdd(prefillDate) {
-  document.body.classList.add('add-mode');
-  const c = document.getElementById('content');
-  c.innerHTML = '';
-
   const isEdit         = editingEntries.length > 0;
   const isCombinedEdit = isEdit && (
     editingEntries.some(e => e.group === 'Both') ||
     new Set(editingEntries.map(e => e.group)).size >= 2
   );
-  const refEntry       = isEdit ? editingEntries[0] : null;
-  const defaultDate    = prefillDate || (refEntry ? refEntry.date : toISODate(getNextFriday()));
+  const refEntry    = isEdit ? editingEntries[0] : null;
+  const defaultDate = prefillDate || (refEntry ? refEntry.date : toISODate(getNextFriday()));
   const _legacyTypeMap = { 'JAG1&2 Combined': 'Combined', 'TBD': 'Special' };
-  const defaultType    = isEdit
+  const defaultType = isEdit
     ? (_legacyTypeMap[refEntry.eventType] || refEntry.eventType)
     : suggestEventType(new Date(defaultDate));
-
-  const defaultTime = isEdit
-    ? (refEntry.time || '18:30')
-    : '18:30';
-
-  const titleText = isEdit ? 'Edit Event' : 'Schedule Event';
+  const defaultTime = isEdit ? (refEntry.time || '18:30') : '18:30';
+  const titleText   = isEdit ? 'Edit Event' : 'Schedule Event';
 
   let deleteBtn = '';
   if (isCombinedEdit) {
@@ -870,58 +852,56 @@ function renderAdd(prefillDate) {
 
   const wrap = document.createElement('div');
   wrap.innerHTML = `
-    <div class="form-wrap">
-      <div class="modal-handle form-handle" style="margin:-10px -16px 0;"></div>
-      <div class="form-title" style="justify-content:space-between;">
-        <span style="display:flex;align-items:center;gap:8px;">
-          <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-          ${titleText}
-        </span>
-        <button type="button" onclick="editingEntries=[];showView('home')" style="background:none;border:none;font-size:1.2rem;color:#94a3b8;cursor:pointer;padding:2px 4px;line-height:1;" title="Close">✕</button>
-      </div>
-      ${isEdit ? `<div style="font-size:.75rem;color:#64748b;margin:-8px 0 12px;">🕒 Last updated: ${formatUpdatedAt(editingEntries.map(e=>e.updatedAt).filter(Boolean).sort().pop()||'') || '—'}</div>` : ''}
+    <div style="font-weight:700;font-size:1rem;margin-bottom:${isEdit ? '4px' : '16px'};">
+      <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>${titleText}
+    </div>
+    ${isEdit ? `<div style="font-size:.75rem;color:#64748b;margin-bottom:16px;">🕒 Last updated: ${formatUpdatedAt(editingEntries.map(e=>e.updatedAt).filter(Boolean).sort().pop()||'') || '—'}</div>` : ''}
 
-      <div class="field-row">
-        <div class="field">
-          <label>Date</label>
-          <input type="date" id="f-date" value="${defaultDate}" onchange="onDateChange(this.value)" ${isEdit ? 'readonly style="background:#f8fafc;"' : ''} />
-        </div>
-        <div class="field">
-          <label>Time</label>
-          <input type="time" id="f-time" value="${_esc(defaultTime)}" style="background:#fff;color:#1e293b;-webkit-appearance:none;appearance:none;width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:.9rem;" />
-        </div>
-      </div>
-
+    <div class="field-row">
       <div class="field">
-        <label>Event Type</label>
-        <select id="f-type" onchange="onTypeChange(this.value)">
-          <option value="Youth Hour"      ${defaultType==='Youth Hour'      ?'selected':''}>Youth Hour</option>
-          <option value="Separated LG"   ${defaultType==='Separated LG'   ?'selected':''}>Separated LG</option>
-          <option value="Combined"       ${defaultType==='Combined'       ?'selected':''}>Combined</option>
-          <option value="Special"        ${defaultType==='Special'        ?'selected':''}>Special</option>
-          <option value="Cancelled"      ${defaultType==='Cancelled'      ?'selected':''}>Cancelled</option>
-          <option value="Replaced"       ${defaultType==='Replaced'       ?'selected':''}>Replaced</option>
-        </select>
+        <label>Date</label>
+        <input type="date" id="f-date" value="${defaultDate}" onchange="onDateChange(this.value)" ${isEdit ? 'readonly style="background:#f8fafc;"' : ''} />
       </div>
-
-      <div id="group-selector" style="margin-bottom:14px;${isEdit?'display:none;':''}">
-        <label>Groups to Schedule</label>
-        <div class="toggle-row" style="margin-top:6px;">
-          <button class="toggle-btn on" id="grp-jag1" onclick="toggleGroup('JAG1')">JAG1</button>
-          <button class="toggle-btn on" id="grp-jag2" onclick="toggleGroup('JAG2')">JAG2</button>
-        </div>
-      </div>
-
-      <div id="form-sections"></div>
-
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-        <button class="btn btn-primary" onclick="submitForm()">Save & Copy</button>
-        ${deleteBtn}
-        <button class="btn btn-secondary" onclick="editingEntries=[];showView('home')">Cancel</button>
+      <div class="field">
+        <label>Time</label>
+        <input type="time" id="f-time" value="${_esc(defaultTime)}" style="background:#fff;color:#1e293b;-webkit-appearance:none;appearance:none;width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:.9rem;" />
       </div>
     </div>
+
+    <div class="field">
+      <label>Event Type</label>
+      <select id="f-type" onchange="onTypeChange(this.value)">
+        <option value="Youth Hour"    ${defaultType==='Youth Hour'    ?'selected':''}>Youth Hour</option>
+        <option value="Separated LG" ${defaultType==='Separated LG' ?'selected':''}>Separated LG</option>
+        <option value="Combined"     ${defaultType==='Combined'     ?'selected':''}>Combined</option>
+        <option value="Special"      ${defaultType==='Special'      ?'selected':''}>Special</option>
+        <option value="Cancelled"    ${defaultType==='Cancelled'    ?'selected':''}>Cancelled</option>
+        <option value="Replaced"     ${defaultType==='Replaced'     ?'selected':''}>Replaced</option>
+      </select>
+    </div>
+
+    <div id="group-selector" style="margin-bottom:14px;${isEdit?'display:none;':''}">
+      <label>Groups to Schedule</label>
+      <div class="toggle-row" style="margin-top:6px;">
+        <button class="toggle-btn on" id="grp-jag1" onclick="toggleGroup('JAG1')">JAG1</button>
+        <button class="toggle-btn on" id="grp-jag2" onclick="toggleGroup('JAG2')">JAG2</button>
+      </div>
+    </div>
+
+    <div id="form-sections"></div>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+      <button class="btn btn-primary" onclick="submitForm()">Save & Copy</button>
+      ${deleteBtn}
+      <button class="btn btn-secondary" onclick="editingEntries=[];closeModal()">Cancel</button>
+    </div>
   `;
-  c.appendChild(wrap);
+
+  const mc = document.getElementById('modal-content');
+  mc.innerHTML = '';
+  mc.appendChild(wrap);
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('modal-box').scrollTop = 0;
   rebuildSections(defaultType);
 }
 
@@ -1323,21 +1303,13 @@ function _openConfirmModal(icon, title, subtitle, confirmLabel, confirmOnclick) 
 function openEditEntries(entries) {
   editingEntries = entries;
   activeGroups   = entries.map(e => e.group);
-  currentView    = 'add';
-  setActiveNav('add');
-  _updateFab();
   renderAdd();
-  document.getElementById('content').scrollTop = 0;
 }
 
 function openAddForDate(dateStr) {
   editingEntries = [];
   activeGroups   = ['JAG1','JAG2'];
-  currentView    = 'add';
-  setActiveNav('add');
-  _updateFab();
   renderAdd(dateStr);
-  document.getElementById('content').scrollTop = 0;
 }
 
 function confirmDeleteEntries(rowIndices, date, label) {
@@ -1903,55 +1875,6 @@ function _applyAttendanceFromEntries(entries) {
   });
 }
 
-// Opens a modal with an editable attendee panel for the given event.
-// Entries should be the full entries array for Combined, or a single-group
-// entry array for Separated LG (so only that group's members appear).
-function _openAttendanceModal(friday, entries) {
-  const date      = toISODate(friday);
-  const eventType = entries[0].eventType;
-  const isComb    = isCombinedType(eventType);
-  const title     = isComb ? eventType : (entries[0].group + ' Attendance');
-
-  openModal('<div style="font-weight:700;font-size:.95rem;margin-bottom:12px;">👥 ' + _esc(title) + ' — ' + _esc(formatDateLong(friday)) + '</div><div id="_att-modal-body"></div>');
-
-  // Temporarily set editingEntries so buildAttendeePanel knows which groups to show
-  const savedEditingEntries = editingEntries;
-  editingEntries = entries;
-  const panel = buildAttendeePanel(date, eventType);
-  editingEntries = savedEditingEntries;
-
-  panel.open = true;
-  panel.style.marginBottom = '12px';
-  document.getElementById('_att-modal-body').appendChild(panel);
-
-  const copyBtn = document.createElement('button');
-  copyBtn.className = 'btn';
-  copyBtn.textContent = '📤 Copy for WhatsApp';
-  copyBtn.onclick = function() {
-    saveAttendanceFromForm(date, eventType);
-    const text = isComb
-      ? _buildCombinedShareText(friday, entries)
-      : _buildGroupShareText(friday, entries);
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text)
-        .then(function() { closeModal(); showToast('Copied to clipboard!'); })
-        .catch(function() { _fallbackCopy(text); closeModal(); });
-    } else {
-      _fallbackCopy(text); closeModal();
-    }
-  };
-
-  const saveBtn = document.createElement('button');
-  saveBtn.className = 'btn btn-secondary';
-  saveBtn.style.marginTop = '8px';
-  saveBtn.textContent = 'Save & Close';
-  saveBtn.onclick = function() { saveAttendanceFromForm(date, eventType); closeModal(); };
-
-  const body = document.getElementById('_att-modal-body');
-  body.appendChild(copyBtn);
-  body.appendChild(saveBtn);
-}
-
 // Returns members to use in the "+ 👥" share message for a given date.
 // Uses cached attendance when available; falls back to all active members.
 // group = undefined for combined events, 'JAG1'/'JAG2' for separated LG.
@@ -2399,7 +2322,7 @@ function _fallbackCopy(text) {
 // Save-state helpers — disable buttons while a server call is in flight
 // =============================================
 function _setFormSaving(saving) {
-  const btn = document.querySelector('#content .btn-primary');
+  const btn = document.querySelector('#modal-box .btn-primary');
   if (!btn) return;
   btn.disabled = saving;
   btn.textContent = saving ? 'Saving…' : 'Save & Copy';
@@ -2650,6 +2573,7 @@ function openModal(html) {
 function closeModal(event) {
   if (event && event.target !== document.getElementById('modal-overlay')) return;
   document.getElementById('modal-overlay').classList.remove('open');
+  editingEntries = [];
 }
 
 // =============================================
@@ -2680,6 +2604,7 @@ function closeModal(event) {
         box.style.transform = '';
         box.style.transition = '';
         overlay.style.background = '';
+        editingEntries = [];
       }, 200);
     } else {
       box.style.transition = 'transform .25s cubic-bezier(.22,.61,.36,1)';
@@ -2698,51 +2623,6 @@ function closeModal(event) {
     document.addEventListener('touchmove', _modalMove, {passive: false});
     document.addEventListener('touchend', _modalEnd);
     document.addEventListener('touchcancel', _modalEnd);
-  }, {passive: true});
-})();
-
-// =============================================
-// Drag-to-dismiss: edit / add form
-// =============================================
-(function() {
-  let _sy = 0, _dy = 0;
-  const content = document.getElementById('content');
-
-  function _formMove(e) {
-    if (currentView !== 'add') { _formEnd(); return; } // self-heal if listener leaked
-    _dy = Math.max(0, e.touches[0].clientY - _sy);
-    content.style.transform = 'translateY(' + _dy + 'px)';
-    e.preventDefault();
-  }
-
-  function _formEnd() {
-    document.removeEventListener('touchmove', _formMove);
-    document.removeEventListener('touchend', _formEnd);
-    document.removeEventListener('touchcancel', _formEnd);
-    if (_dy > 50) {
-      content.style.transition = 'transform .2s ease';
-      content.style.transform = 'translateY(100%)';
-      setTimeout(function() {
-        content.style.transition = '';
-        content.style.transform = '';
-        editingEntries = [];
-        showView('home');
-      }, 200);
-    } else {
-      content.style.transition = 'transform .25s cubic-bezier(.22,.61,.36,1)';
-      content.style.transform = '';
-      setTimeout(function() { content.style.transition = ''; }, 250);
-    }
-    _dy = 0;
-  }
-
-  document.addEventListener('touchstart', function(e) {
-    if (!e.target.classList.contains('form-handle')) return;
-    _sy = e.touches[0].clientY; _dy = 0;
-    content.style.transition = 'none';
-    document.addEventListener('touchmove', _formMove, {passive: false});
-    document.addEventListener('touchend', _formEnd);
-    document.addEventListener('touchcancel', _formEnd);
   }, {passive: true});
 })();
 
