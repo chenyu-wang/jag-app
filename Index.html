@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.43.3 (2026-05-26) -->
+  <!-- Version: 1.43.4 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -14,7 +14,7 @@
   <style>
     /* ---- Reset & Base ---- */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; overflow-x: hidden; max-width: 100vw; }
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; overflow: hidden; max-width: 100vw; }
 
     /* ---- Layout ---- */
     #app { display: flex; flex-direction: column; height: 100vh; overflow-x: hidden; }
@@ -178,7 +178,7 @@
     #modal-box { background: #fff; border-radius: 16px 16px 0 0; width: 100%; max-height: 90vh; overflow-y: auto; padding: 20px 16px 32px; position: relative; }
     .modal-close-btn { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 1.15rem; color: #94a3b8; cursor: pointer; padding: 4px 7px; line-height: 1; border-radius: 6px; z-index: 1; }
     .modal-close-btn:active { color: #1e293b; background: #f1f5f9; }
-    .modal-handle { width: 68px; height: 4px; background: #cbd5e1; border-radius: 2px; margin: 0 auto 16px; cursor: grab; touch-action: none; }
+    .modal-handle { width: 68px; height: 4px; background: #cbd5e1; border-radius: 2px; cursor: grab; touch-action: none; display: block; margin: 0 auto; padding: 10px 0; background-clip: content-box; }
 
     /* ---- Misc ---- */
     .section-heading { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #94a3b8; margin: 16px 0 8px; }
@@ -2636,9 +2636,9 @@ function closeModal(event) {
   }
 
   function _modalEnd() {
-    window.removeEventListener('touchmove', _modalMove);
-    window.removeEventListener('touchend', _modalEnd);
-    if (_dy > 90) {
+    document.removeEventListener('touchmove', _modalMove);
+    document.removeEventListener('touchend', _modalEnd);
+    if (_dy > 50) {
       box.style.transition = 'transform .2s ease';
       box.style.transform = 'translateY(100%)';
       setTimeout(function() {
@@ -2657,15 +2657,11 @@ function closeModal(event) {
   }
 
   box.addEventListener('touchstart', function(e) {
-    const handle = box.querySelector('.modal-handle');
-    if (!handle) return;
-    const rect = handle.getBoundingClientRect();
-    const t = e.touches[0];
-    if (t.clientY > rect.bottom + 44) return;
-    _sy = t.clientY; _dy = 0;
+    if (!e.target.closest('.modal-handle')) return;
+    _sy = e.touches[0].clientY; _dy = 0;
     box.style.transition = 'none';
-    window.addEventListener('touchmove', _modalMove, {passive: false});
-    window.addEventListener('touchend', _modalEnd);
+    document.addEventListener('touchmove', _modalMove, {passive: false});
+    document.addEventListener('touchend', _modalEnd);
   }, {passive: true});
 })();
 
@@ -2685,7 +2681,7 @@ function closeModal(event) {
   function _formEnd() {
     document.removeEventListener('touchmove', _formMove);
     document.removeEventListener('touchend', _formEnd);
-    if (_dy > 90) {
+    if (_dy > 50) {
       content.style.transition = 'transform .2s ease';
       content.style.transform = 'translateY(100%)';
       setTimeout(function() {

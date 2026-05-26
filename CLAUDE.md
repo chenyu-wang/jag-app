@@ -171,6 +171,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.43.1 | Drag-to-dismiss handle on all sheets: `.modal-handle` enlarged (52×6px, darker); added to event edit/add form as `.form-handle`; touch drag-down gesture dismisses modal bottom sheet and edit form with slide-out animation | n/a |
 | v1.43.2 | UX fixes: hide bottom nav completely during edit (`display:none`); handle resized to 68×4px (longer, thinner); About modal instructions centred | n/a |
 | v1.43.3 | Fix drag-to-dismiss scroll conflict: attach `touchmove` dynamically with `{passive:false}` + `e.preventDefault()` only during active drag; removes passive listener that let browser scroll the whole page simultaneously | n/a |
+| v1.43.4 | Fix whole-app scroll on drag: `html,body {overflow:hidden}` stops iOS rubber-band; handle touch target expanded with `padding:10px 0; background-clip:content-box`; modal drag detection uses `e.target.closest` (reliable); both drag thresholds 90→50px | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
