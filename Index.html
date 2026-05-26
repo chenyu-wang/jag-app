@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.43.4 (2026-05-26) -->
+  <!-- Version: 1.43.5 (2026-05-26) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -14,7 +14,7 @@
   <style>
     /* ---- Reset & Base ---- */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; overflow: hidden; max-width: 100vw; }
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; overflow-x: hidden; max-width: 100vw; }
 
     /* ---- Layout ---- */
     #app { display: flex; flex-direction: column; height: 100vh; overflow-x: hidden; }
@@ -29,7 +29,7 @@
     .install-text { flex: 1; font-size: .8rem; line-height: 1.55; color: #3730a3; }
     .install-text b { color: #312e81; }
     .install-dismiss { background: none; border: none; color: #6366f1; font-size: 1rem; cursor: pointer; padding: 0; flex-shrink: 0; font-weight: 700; line-height: 1; margin-top: 1px; }
-    #content  { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px 12px calc(100px + env(safe-area-inset-bottom)); }
+    #content  { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px 12px calc(100px + env(safe-area-inset-bottom)); overscroll-behavior: none; }
     #bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e2e8f0; display: flex; z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
     .nav-btn { flex: 1; border: none; background: none; padding: 12px 0 14px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #94a3b8; font-size: .65rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; transition: color .15s; }
     .nav-btn svg { width: 22px; height: 22px; }
@@ -178,7 +178,8 @@
     #modal-box { background: #fff; border-radius: 16px 16px 0 0; width: 100%; max-height: 90vh; overflow-y: auto; padding: 20px 16px 32px; position: relative; }
     .modal-close-btn { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 1.15rem; color: #94a3b8; cursor: pointer; padding: 4px 7px; line-height: 1; border-radius: 6px; z-index: 1; }
     .modal-close-btn:active { color: #1e293b; background: #f1f5f9; }
-    .modal-handle { width: 68px; height: 4px; background: #cbd5e1; border-radius: 2px; cursor: grab; touch-action: none; display: block; margin: 0 auto; padding: 10px 0; background-clip: content-box; }
+    .modal-handle { width: 68px; height: 24px; display: flex; align-items: center; justify-content: center; margin: 0 auto; cursor: grab; touch-action: none; }
+    .modal-handle::before { content: ''; width: 100%; height: 4px; background: #cbd5e1; border-radius: 2px; display: block; }
 
     /* ---- Misc ---- */
     .section-heading { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #94a3b8; margin: 16px 0 8px; }
@@ -2638,6 +2639,8 @@ function closeModal(event) {
   function _modalEnd() {
     document.removeEventListener('touchmove', _modalMove);
     document.removeEventListener('touchend', _modalEnd);
+    document.removeEventListener('touchcancel', _modalEnd);
+    box.style.overflowY = '';
     if (_dy > 50) {
       box.style.transition = 'transform .2s ease';
       box.style.transform = 'translateY(100%)';
@@ -2660,8 +2663,10 @@ function closeModal(event) {
     if (!e.target.closest('.modal-handle')) return;
     _sy = e.touches[0].clientY; _dy = 0;
     box.style.transition = 'none';
+    box.style.overflowY = 'hidden'; // prevent iOS claiming this as its scroll target
     document.addEventListener('touchmove', _modalMove, {passive: false});
     document.addEventListener('touchend', _modalEnd);
+    document.addEventListener('touchcancel', _modalEnd);
   }, {passive: true});
 })();
 
@@ -2681,6 +2686,7 @@ function closeModal(event) {
   function _formEnd() {
     document.removeEventListener('touchmove', _formMove);
     document.removeEventListener('touchend', _formEnd);
+    document.removeEventListener('touchcancel', _formEnd);
     if (_dy > 50) {
       content.style.transition = 'transform .2s ease';
       content.style.transform = 'translateY(100%)';
@@ -2704,6 +2710,7 @@ function closeModal(event) {
     content.style.transition = 'none';
     document.addEventListener('touchmove', _formMove, {passive: false});
     document.addEventListener('touchend', _formEnd);
+    document.addEventListener('touchcancel', _formEnd);
   }, {passive: true});
 })();
 
