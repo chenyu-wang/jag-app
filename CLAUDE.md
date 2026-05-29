@@ -189,6 +189,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.45.4 | Android back button closes modals: `history.pushState({jagModal:true})` in `openModal()`/`renderAdd()`; `popstate` listener calls `closeModal()`; `history.replaceState` on user-initiated close and drag-dismiss to neutralise history entry; `_modalHistoryPushed` flag prevents double-push. Lyric count input: `inputmode="numeric"` for numeric keypad on Android | n/a |
 | v1.45.5 | Bug fix: `_buildCombinedShareText` referenced undefined `allActive`; replaced with `getActive()` — was silently throwing in the GAS success handler, preventing `finishSave` from running after saving Combined events with a venue | n/a |
 | v1.45.6 | `getFridaysRange()` caps future at today+4 weeks instead of todayYear+3; only extends past for older entries; far-future scheduled entries still appear via `getScheduleDates()` direct insertion | n/a |
+| v1.45.7 | `getFridaysRange()` no longer generates any past Fridays — starts from today (or next Friday); past entry dates enter `getScheduleDates()` directly from `allEntries`, eliminating empty TBC placeholder cards for unscheduled past Fridays | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.

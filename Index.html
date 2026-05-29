@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.45.6 (2026-05-29) -->
+  <!-- Version: 1.45.7 (2026-05-29) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1771,15 +1771,11 @@ function getNextFriday() {
 function getFridaysRange() {
   const now    = today();
   const cutoff = new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000); // today + 4 weeks
-  let startYear = now.getFullYear() - 1;
-  // Extend past to cover older loaded entries; never extend future beyond cutoff
-  // (far-future entry dates are added individually in getScheduleDates)
-  allEntries.forEach(function(e) {
-    const y = parseInt(e.date.split('-')[0], 10);
-    if (!isNaN(y) && y < startYear) startYear = y;
-  });
+  // Start from today (or next Friday if today is not Friday) — no past Fridays generated.
+  // Past entry dates are inserted directly in getScheduleDates() so there are no empty
+  // placeholder cards for unscheduled past Fridays.
   const fridays = [];
-  let d = new Date(startYear, 0, 1);
+  let d = new Date(now);
   while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
   while (d <= cutoff) {
     fridays.push(new Date(d));
