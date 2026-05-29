@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.46.0 (2026-05-29) -->
+  <!-- Version: 1.46.1 (2026-05-29) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -21,8 +21,10 @@
     header { background: #6366f1; color: #fff; padding: 14px 16px 10px; flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between; }
     header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: .3px; }
     header p  { font-size: .75rem; opacity: .8; margin-top: 2px; }
-    #about-btn { background: none; border: none; color: rgba(255,255,255,.75); cursor: pointer; padding: 2px; line-height: 1; flex-shrink: 0; margin-top: 2px; }
-    #about-btn:active { color: #fff; }
+    #about-btn, #refresh-btn { background: none; border: none; color: rgba(255,255,255,.75); cursor: pointer; padding: 2px; line-height: 1; }
+    #about-btn:active, #refresh-btn:active { color: #fff; }
+    @keyframes _spin { to { transform: rotate(360deg); } }
+    #refresh-btn.spinning svg { animation: _spin .7s linear infinite; }
     #install-banner-wrap { flex-shrink: 0; }
     #install-banner { background: #ede9fe; border-bottom: 1px solid #c7d2fe; padding: 10px 14px; display: flex; align-items: flex-start; gap: 8px; }
     .install-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
@@ -232,9 +234,14 @@
       <h1>JAG App</h1>
       <p id="header-sub">Loading...</p>
     </div>
-    <button id="about-btn" onclick="openAbout()" title="About">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;display:block;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-    </button>
+    <div style="display:flex;gap:4px;flex-shrink:0;margin-top:2px;">
+      <button id="refresh-btn" onclick="refreshData()" title="Refresh">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:19px;height:19px;display:block;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+      <button id="about-btn" onclick="openAbout()" title="About">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;display:block;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      </button>
+    </div>
   </header>
 
   <div id="install-banner-wrap"></div>
@@ -480,7 +487,15 @@ function showView(view) {
   _c.classList.add('view-enter');
 }
 
+function refreshData() {
+  const btn = document.getElementById('refresh-btn');
+  if (btn) btn.classList.add('spinning');
+  loadData();
+}
+
 function renderView() {
+  const btn = document.getElementById('refresh-btn');
+  if (btn) btn.classList.remove('spinning');
   _updateFab();
   if      (currentView === 'home')    renderHome();
   else if (currentView === 'members') renderMembers();
@@ -549,10 +564,13 @@ function renderHome(resetWindow) {
   }
   const entriesByDate = _entriesByDateCache;
 
-  // Window end: up to dashFuture placeholder slots, but always extend to include real scheduled events
-  const windowEnd = Math.min(fridays.length - 1, upcomingIdx + dashFuture);
+  // Window end: up to dashFuture placeholder slots, extended to include real scheduled events
+  // within 2 months (cap prevents showing a huge list for far-future entries)
+  const windowEnd      = Math.min(fridays.length - 1, upcomingIdx + dashFuture);
+  const twoMonthsLater = new Date(todayDate.getTime() + 61 * 24 * 60 * 60 * 1000);
   let endIdx = windowEnd;
   for (let i = windowEnd + 1; i < fridays.length; i++) {
+    if (fridays[i] >= twoMonthsLater) break;
     if (entriesByDate.get(toISODate(fridays[i]))) endIdx = i;
   }
 
