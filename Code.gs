@@ -1,11 +1,11 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.45.4 (2026-05-26)
+// Version: 1.45.5 (2026-05-29)
 // ============================================================
 
-const VERSION      = '1.45.4';
-const VERSION_DATE = '2026-05-26';
+const VERSION      = '1.45.5';
+const VERSION_DATE = '2026-05-29';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
 const SCHEDULE_SHEET_NAME = 'Schedule';

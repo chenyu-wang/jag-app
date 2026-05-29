@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.45.4 (2026-05-26) -->
+  <!-- Version: 1.45.5 (2026-05-29) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -2147,7 +2147,7 @@ function _buildCombinedShareText(friday, entries) {
   } else {
     // ---- Combined format ----
     const dateStr  = formatShareDate(friday);
-    const hostName = detectHost(entry.venue, allActive);
+    const hostName = detectHost(entry.venue, getActive());
 
     lines.push('Arise in Faith, Courage & Boldness to Impact. It is time for..');
     lines.push('🎊 COMBINED JAG 1&2');
