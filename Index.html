@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.45.5 (2026-05-29) -->
+  <!-- Version: 1.45.6 (2026-05-29) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1769,21 +1769,19 @@ function getNextFriday() {
 // Returns every Friday from Jan 1 of the current year through Dec 31 of next year.
 // Covers current year + 3 ahead so the app stays useful well beyond any single year.
 function getFridaysRange() {
-  const todayYear = new Date().getFullYear();
-  let startYear = todayYear - 1;
-  let endYear   = todayYear + 3;
-  // Extend to cover all loaded entries
+  const now    = today();
+  const cutoff = new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000); // today + 4 weeks
+  let startYear = now.getFullYear() - 1;
+  // Extend past to cover older loaded entries; never extend future beyond cutoff
+  // (far-future entry dates are added individually in getScheduleDates)
   allEntries.forEach(function(e) {
     const y = parseInt(e.date.split('-')[0], 10);
-    if (!isNaN(y)) {
-      if (y < startYear) startYear = y;
-      if (y > endYear)   endYear   = y;
-    }
+    if (!isNaN(y) && y < startYear) startYear = y;
   });
   const fridays = [];
   let d = new Date(startYear, 0, 1);
   while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
-  while (d.getFullYear() <= endYear) {
+  while (d <= cutoff) {
     fridays.push(new Date(d));
     d.setDate(d.getDate() + 7);
   }
