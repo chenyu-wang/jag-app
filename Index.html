@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.46.1 (2026-05-29) -->
+  <!-- Version: 1.46.2 (2026-05-29) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -2198,6 +2198,11 @@ function _buildCombinedShareText(friday, entries) {
         const label = m.name === hostName ? 'Host' : '';
         lines.push(String(idx++).padStart(2) + '. ' + displayName(m.name) + ' - ' + label);
       });
+    }
+    if (olderSS.length) {
+      lines.push('');
+      lines.push('Older Sunday School:');
+      olderSS.forEach(m => lines.push(String(idx++).padStart(2) + '. ' + displayName(m.name)));
     }
     if (adults.length) {
       lines.push('');
