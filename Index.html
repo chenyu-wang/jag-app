@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.45.9 (2026-05-29) -->
+  <!-- Version: 1.46.0 (2026-05-29) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -536,9 +536,25 @@ function renderHome(resetWindow) {
   let upcomingIdx = fridays.findIndex(f => f >= todayDate);
   if (upcomingIdx === -1) upcomingIdx = fridays.length - 1;
 
-  const startIdx       = Math.max(0, upcomingIdx - dashPast);
-  const endIdx         = Math.min(fridays.length - 1, upcomingIdx + dashFuture);
+  const startIdx        = Math.max(0, upcomingIdx - dashPast);
   const upcomingDateStr = toISODate(fridays[upcomingIdx]);
+
+  // Build entry cache before computing endIdx so we can detect real future events
+  if (!_entriesByDateCache) {
+    _entriesByDateCache = new Map();
+    allEntries.forEach(e => {
+      if (!_entriesByDateCache.has(e.date)) _entriesByDateCache.set(e.date, []);
+      _entriesByDateCache.get(e.date).push(e);
+    });
+  }
+  const entriesByDate = _entriesByDateCache;
+
+  // Window end: up to dashFuture placeholder slots, but always extend to include real scheduled events
+  const windowEnd = Math.min(fridays.length - 1, upcomingIdx + dashFuture);
+  let endIdx = windowEnd;
+  for (let i = windowEnd + 1; i < fridays.length; i++) {
+    if (entriesByDate.get(toISODate(fridays[i]))) endIdx = i;
+  }
 
   if (startIdx === 0) {
     if (_hasMorePast) {
@@ -556,15 +572,6 @@ function renderHome(resetWindow) {
       c.appendChild(tip);
     }
   }
-
-  if (!_entriesByDateCache) {
-    _entriesByDateCache = new Map();
-    allEntries.forEach(e => {
-      if (!_entriesByDateCache.has(e.date)) _entriesByDateCache.set(e.date, []);
-      _entriesByDateCache.get(e.date).push(e);
-    });
-  }
-  const entriesByDate = _entriesByDateCache;
 
   let shownYear = null;
   fridays.slice(startIdx, endIdx + 1).forEach(friday => {

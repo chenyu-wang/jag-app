@@ -192,6 +192,7 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.45.7 | `getFridaysRange()` no longer generates any past Fridays — starts from today (or next Friday); past entry dates enter `getScheduleDates()` directly from `allEntries`, eliminating empty TBC placeholder cards for unscheduled past Fridays | n/a |
 | v1.45.8 | Performance: eliminate 3 redundant Sheets API reads in save path — `data.length` replaces `sheet.getLastRow()` in `saveRosterEntries`; `sortRosterSheet` accepts `lastRow`+`dataStartRow` params to skip its own `getLastRow()`+`getValue()` reads; saves ~400–900ms per save, more on new entries that trigger sort | n/a |
 | v1.45.9 | Fix history scroll jank: scroll-position correction after `renderHome(false)` moved from `requestAnimationFrame` to synchronous (no one-frame flash); add `-webkit-overflow-scrolling:touch` + `will-change:scroll-position` to `#content` | n/a |
+| v1.46.0 | Future scheduled events always visible regardless of `dashFuture` window: `renderHome` builds `_entriesByDateCache` before computing `endIdx`, then extends `endIdx` past the 4-week placeholder window to include any real entries further ahead | n/a |
 
 ### Current schema (v1.29.2, 13 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
