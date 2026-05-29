@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.45.7 (2026-05-29)
+// Version: 1.45.8 (2026-05-29)
 // ============================================================
 
-const VERSION      = '1.45.7';
+const VERSION      = '1.45.8';
 const VERSION_DATE = '2026-05-29';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -265,6 +265,7 @@ function saveRosterEntries(entries) {
     const headerRowIdx = Object.keys(firstRowMap).length > 0 ? 0 : 1;
     const col          = headerRowIdx === 0 ? firstRowMap : _rosterColMap(data[headerRowIdx]);
     const numCols      = data[headerRowIdx].length;
+    const dataStartRow = headerRowIdx + 2; // 1-indexed row where data begins (avoids re-read in sort)
 
     // Sort only when the row order can change: any new row or any entry with a changed date.
     const needsSort = entries.some(function(entry) {
@@ -275,7 +276,7 @@ function saveRosterEntries(entries) {
       return _dateChanged(new Date(oldCell), newDate);
     });
 
-    let nextNewRow = sheet.getLastRow() + 1;
+    let nextNewRow = data.length + 1; // data.length === getLastRow() — already in memory, no extra read
     entries.forEach(function(entry) {
       const dateObj = _parseDate(entry.date);
       const rowData = new Array(numCols).fill('');
@@ -305,7 +306,7 @@ function saveRosterEntries(entries) {
     SpreadsheetApp.flush(); // commit writes before sort so getLastColumn() sees col M
     _clearEntriesCache();
     if (needsSort) {
-      sortRosterSheet(sheet);
+      sortRosterSheet(sheet, nextNewRow - 1, dataStartRow);
       return { success: true };
     }
     return { success: true, stable: true }; // rowIndices unchanged — client can skip loadData()
@@ -467,15 +468,13 @@ function _parseDate(dateStr) {
   return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
 }
 
-function sortRosterSheet(sheet) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow <= 2) return;
-  // Auto-detect data start row: if row 1 col A is 'Date', headers are in row 1 — data starts at 2.
-  // Otherwise a notice row exists in row 1 — data starts at 3.
-  const row1ColA     = _normalizeStr(sheet.getRange(1, 1).getValue());
-  const dataStartRow = row1ColA === 'date' ? 2 : 3;
-  if (lastRow < dataStartRow) return;
-  sheet.getRange(dataStartRow, 1, lastRow - dataStartRow + 1, sheet.getLastColumn()).sort([
+function sortRosterSheet(sheet, lastRow, dataStartRow) {
+  // lastRow and dataStartRow may be passed from saveRosterEntries to avoid extra reads.
+  // When called standalone (e.g. from the editor), they default to sheet reads.
+  const _lastRow      = lastRow      || sheet.getLastRow();
+  const _dataStartRow = dataStartRow || (_normalizeStr(sheet.getRange(1, 1).getValue()) === 'date' ? 2 : 3);
+  if (_lastRow < _dataStartRow) return;
+  sheet.getRange(_dataStartRow, 1, _lastRow - _dataStartRow + 1, sheet.getLastColumn()).sort([
     { column: 1, ascending: true },
     { column: 2, ascending: true }
   ]);
