@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.46.2 (2026-05-29) -->
+  <!-- Version: 1.47.0 (2026-05-31) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -278,8 +278,9 @@
 <div id="toast"></div>
 
 <script>
-// Injected by doGet() — page renders immediately without a second round-trip.
-// Falls back to loadData() if null (SSR failed or cold-start error).
+// Injected by doGet() via getScheduleData() — Schedule entries only, so first paint
+// is fast. Members + Lyrics arrive via a background loadData() right after first paint.
+// Falls back to a full loadData() if null (SSR failed or cold-start error).
 const _INITIAL_DATA = <?!= initialData ?>;
 
 // =============================================
@@ -337,6 +338,9 @@ document.addEventListener('DOMContentLoaded', function() {
       if (el) el.textContent = 'v' + _INITIAL_DATA.version;
     }
     renderView();
+    // SSR ships entries only — pull Members + Lyrics in the background, off the
+    // critical path. Home already rendered; this re-renders once they arrive.
+    if (!_INITIAL_DATA.members) loadData();
   } else {
     loadData(); // fallback: SSR data unavailable, fetch async
   }
@@ -2723,16 +2727,25 @@ function showToast(msg) {
 // PWA manifest
 // =============================================
 (function() {
+  // The manifest MUST be same-origin with the document for Chrome/Android to honour
+  // start_url + scope, so it's built as a same-origin Blob (a cross-origin CDN
+  // manifest would put scope on the CDN and break installability). The icon may be
+  // cross-origin — that's allowed. iOS ignores the manifest entirely and installs
+  // from the apple-touch-icon + apple-mobile-web-app-* meta tags in <head>.
   const iconUrl = 'https://cdn.jsdelivr.net/gh/chenyu-wang/jag-app@main/icon.png';
   const manifest = {
+    id: 'jag-app',                 // stable identity so updates don't register a new app
     name: 'JAG App',
     short_name: 'JAG App',
     start_url: location.href,
     display: 'standalone',
+    orientation: 'portrait',
     background_color: '#6366f1',
     theme_color: '#6366f1',
     icons: [
-      { src: iconUrl, sizes: '180x180', type: 'image/png', purpose: 'any maskable' }
+      // A plain 'any' icon plus a maskable one — some Android versions require both.
+      { src: iconUrl, sizes: '180x180', type: 'image/png', purpose: 'any' },
+      { src: iconUrl, sizes: '180x180', type: 'image/png', purpose: 'maskable' }
     ]
   };
   const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
