@@ -1,11 +1,11 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.46.2 (2026-05-29)
+// Version: 1.47.0 (2026-05-31)
 // ============================================================
 
-const VERSION      = '1.46.2';
-const VERSION_DATE = '2026-05-29';
+const VERSION      = '1.47.0';
+const VERSION_DATE = '2026-05-31';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
 const SCHEDULE_SHEET_NAME = 'Schedule';
@@ -13,14 +13,21 @@ const MEMBERS_SHEET_NAME = 'Members';
 const LYRICS_SHEET_NAME  = 'Lyrics';
 const APP_NOTICE      = '⚠️  Please use the JAG App to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/JAG-App';
 
+// CacheService TTL (seconds). 21600 = 6h, the CacheService maximum.
+// Safe to keep long because every write path invalidates the relevant key precisely
+// (_clearEntriesCache / _clearMembersCache / _clearLyricsCache). Staleness can only
+// occur if the sheet is edited directly outside the app (discouraged by APP_NOTICE).
+const CACHE_TTL = 21600;
+
 // ---- Entry Point ----
 
 function doGet() {
   const template = HtmlService.createTemplateFromFile('Index');
   try {
-    // Inject pre-loaded data so the page renders immediately — no second round-trip needed.
-    // Escape </script so the JSON literal can't break the surrounding <script> tag.
-    template.initialData = JSON.stringify(getAllData()).replace(/<\/script/gi, '<\\/script');
+    // Inject ONLY the Schedule entries so first paint is fast — doGet stays off the
+    // Members and Lyrics sheet reads. The client fetches those in the background via
+    // getAllData() after first paint. Escape </script so the JSON can't break the tag.
+    template.initialData = JSON.stringify(getScheduleData()).replace(/<\/script/gi, '<\\/script');
   } catch(e) {
     template.initialData = 'null'; // fallback: client calls loadData() instead
     Logger.log('doGet data load error: ' + e);
@@ -32,6 +39,29 @@ function doGet() {
 }
 
 // ---- Data Fetching ----
+
+// Lightweight initial payload for doGet(): Schedule entries + version only.
+// Members and Lyrics are deferred to a background getAllData() call after first paint,
+// keeping the blocking server render off two extra sheet reads. Shares the same
+// 'allData_entries' cache slot as getAllData(), so the background call reuses this read.
+function getScheduleData() {
+  const cache = CacheService.getScriptCache();
+  let entriesData;
+  try { const h = cache.get('allData_entries'); if (h) entriesData = JSON.parse(h); } catch(e) {}
+  if (!entriesData) {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const r = getRosterEntries(ss);
+    entriesData = { list: r.list, hasMorePast: r.hasMorePast, hasMoreFuture: r.hasMoreFuture };
+    try { cache.put('allData_entries', JSON.stringify(entriesData), CACHE_TTL); } catch(e) {}
+  }
+  return {
+    entries:       entriesData.list,
+    hasMorePast:   entriesData.hasMorePast,
+    hasMoreFuture: entriesData.hasMoreFuture,
+    version:       VERSION,
+    versionDate:   VERSION_DATE
+  };
+}
 
 function getAllData() {
   // C: split across three cache keys so each gets its own 100 KB slot.
@@ -48,15 +78,15 @@ function getAllData() {
     if (!entriesData) {
       const r = getRosterEntries(ss);
       entriesData = { list: r.list, hasMorePast: r.hasMorePast, hasMoreFuture: r.hasMoreFuture };
-      try { cache.put('allData_entries', JSON.stringify(entriesData), 60); } catch(e) {}
+      try { cache.put('allData_entries', JSON.stringify(entriesData), CACHE_TTL); } catch(e) {}
     }
     if (!membersData) {
       membersData = getMembers(ss);
-      try { cache.put('allData_members', JSON.stringify(membersData), 60); } catch(e) {}
+      try { cache.put('allData_members', JSON.stringify(membersData), CACHE_TTL); } catch(e) {}
     }
     if (!lyricsData) {
       lyricsData = getLyrics(ss);
-      try { cache.put('allData_lyrics', JSON.stringify(lyricsData), 60); } catch(e) {}
+      try { cache.put('allData_lyrics', JSON.stringify(lyricsData), CACHE_TTL); } catch(e) {}
     }
   }
 
