@@ -1,11 +1,11 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.47.0 (2026-05-31)
+// Version: 1.48.0 (2026-11-16)
 // ============================================================
 
-const VERSION      = '1.47.0';
-const VERSION_DATE = '2026-05-31';
+const VERSION      = '1.48.0';
+const VERSION_DATE = '2026-11-16';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
 const SCHEDULE_SHEET_NAME = 'Schedule';
@@ -18,6 +18,8 @@ const APP_NOTICE      = '⚠️  Please use the JAG App to make changes — do n
 // (_clearEntriesCache / _clearMembersCache / _clearLyricsCache). Staleness can only
 // occur if the sheet is edited directly outside the app (discouraged by APP_NOTICE).
 const CACHE_TTL = 21600;
+
+const SCHEDULE_GROUPS = ['JAG1', 'JAG2', 'Both'];
 
 // ---- Entry Point ----
 
@@ -63,14 +65,19 @@ function getScheduleData() {
   };
 }
 
-function getAllData() {
+// force=true skips the cache read and re-reads all three sheets (then re-fills the cache).
+// Used by the header refresh button and after a "stale row" rejection, so a user can always
+// get the sheet's real contents even if it was edited directly or the cache is out of date.
+function getAllData(force) {
   // C: split across three cache keys so each gets its own 100 KB slot.
   // Each key is independently invalidated by the selective clear helpers below.
   const cache = CacheService.getScriptCache();
   let entriesData, membersData, lyricsData;
-  try { const h = cache.get('allData_entries'); if (h) entriesData = JSON.parse(h); } catch(e) {}
-  try { const h = cache.get('allData_members'); if (h) membersData = JSON.parse(h); } catch(e) {}
-  try { const h = cache.get('allData_lyrics');  if (h) lyricsData  = JSON.parse(h); } catch(e) {}
+  if (!force) {
+    try { const h = cache.get('allData_entries'); if (h) entriesData = JSON.parse(h); } catch(e) {}
+    try { const h = cache.get('allData_members'); if (h) membersData = JSON.parse(h); } catch(e) {}
+    try { const h = cache.get('allData_lyrics');  if (h) lyricsData  = JSON.parse(h); } catch(e) {}
+  }
 
   if (!entriesData || !membersData || !lyricsData) {
     // B: open spreadsheet once and share across all missed fetches.
@@ -282,36 +289,146 @@ function getMembers(ss) {
   return members;
 }
 
+// ---- Write safety ----
+// A row's position is the only identity a row has in these sheets, and positions move
+// whenever anyone adds, deletes or sorts rows. Two rules keep writes on the right row:
+//   1. Every write runs under one script-wide lock (_withWriteLock), so writes never interleave.
+//   2. A rowIndex sent by a client is only a HINT. The row is verified against what the client
+//      believes it holds (Date + Group, member name, song name) and searched for if the hint
+//      is wrong. If it cannot be found the write is rejected with stale:true — it never falls
+//      back to writing or deleting by position.
+
+function _withWriteLock(fn) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+  } catch (e) {
+    return { success: false, error: 'The sheet is busy — please try again in a moment.' };
+  }
+  try {
+    const result = fn();
+    SpreadsheetApp.flush(); // commit before the lock is released
+    return result;
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function _staleResult(message) {
+  return {
+    success: false,
+    stale:   true,
+    error:   message || 'This changed since the app loaded it. The list has been refreshed — please try again.'
+  };
+}
+
+// Reads the Schedule sheet once: all values, the header→column map and where the data starts.
+function _readSchedule(sheet) {
+  const data         = sheet.getDataRange().getValues();
+  const firstRowMap  = _rosterColMap(data[0]);
+  const headerRowIdx = Object.keys(firstRowMap).length > 0 ? 0 : 1;
+  const col          = headerRowIdx === 0 ? firstRowMap : _rosterColMap(data[headerRowIdx] || []);
+  return { data: data, col: col, headerRowIdx: headerRowIdx, tzOff: _scriptTzOffsetMs(Session.getScriptTimeZone()) };
+}
+
+// Returns the 1-indexed row holding the entry with ref.date + ref.group, or 0 if there is none.
+// ref.rowIndex is tried first; if that row holds something else, the sheet is searched.
+function _findScheduleRow(sched, ref) {
+  const data = sched.data, col = sched.col;
+  const isMatch = function(i) {
+    const row = data[i];
+    if (i <= sched.headerRowIdx || !row || !row[col.date]) return false;
+    return String(row[col.group] || '') === ref.group &&
+           _fmtDateISO(new Date(row[col.date]), sched.tzOff) === ref.date;
+  };
+  if (ref.rowIndex && isMatch(ref.rowIndex - 1)) return ref.rowIndex;
+  for (let i = sched.headerRowIdx + 1; i < data.length; i++) {
+    if (isMatch(i)) return i + 1;
+  }
+  return 0;
+}
+
+// Same idea for the Members and Lyrics tabs, whose rows are identified by column A.
+// colA is the sheet's column A values from row 1 (see _readColA).
+function _findRowByColA(colA, firstDataRow, rowIndex, expected) {
+  if (expected === undefined || expected === null || expected === '') return 0;
+  const want    = String(expected);
+  const isMatch = function(r) { return r >= firstDataRow && r <= colA.length && String(colA[r - 1][0]) === want; };
+  if (rowIndex && isMatch(rowIndex)) return rowIndex;
+  for (let r = firstDataRow; r <= colA.length; r++) {
+    if (isMatch(r)) return r;
+  }
+  return 0;
+}
+
+function _readColA(sheet) {
+  return sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 1), 1).getValues();
+}
+
 // ---- Roster CRUD ----
 
-function saveRosterEntries(entries) {
-  try {
-    const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(SCHEDULE_SHEET_NAME);
-    if (!sheet) return { success: false, error: 'Roster sheet not found' };
+// entries:    rows to write. An entry with a rowIndex updates that row and carries
+//             orig {date, group} — what the row held when the client loaded it. An entry
+//             without a rowIndex is appended.
+// removeRefs: optional [{rowIndex, date, group}] rows to delete in the same locked call
+//             (per-group rows left over when an event is converted to a single "Both" row).
+// Returns {success, stable}. stable:true means no row moved, so the client's rowIndices
+// are still correct and it can skip reloading.
+function saveRosterEntries(entries, removeRefs) {
+  return _withWriteLock(function() {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SCHEDULE_SHEET_NAME);
+    if (!sheet) return { success: false, error: 'Schedule sheet not found' };
 
-    const data         = sheet.getDataRange().getValues();
-    const firstRowMap  = _rosterColMap(data[0]);
-    const headerRowIdx = Object.keys(firstRowMap).length > 0 ? 0 : 1;
-    const col          = headerRowIdx === 0 ? firstRowMap : _rosterColMap(data[headerRowIdx]);
-    const numCols      = data[headerRowIdx].length;
-    const dataStartRow = headerRowIdx + 2; // 1-indexed row where data begins (avoids re-read in sort)
+    const sched = _readSchedule(sheet);
+    const data  = sched.data;
+    const col   = sched.col;
+    if (col.date === undefined || col.group === undefined) {
+      return { success: false, error: 'Schedule sheet is missing its Date or Group header' };
+    }
+    const numCols      = data[sched.headerRowIdx].length;
+    const dataStartRow = sched.headerRowIdx + 2; // 1-indexed row where data begins
 
-    // Sort only when the row order can change: any new row or any entry with a changed date.
-    const needsSort = entries.some(function(entry) {
-      if (!entry.rowIndex) return true;
-      const newDate = _parseDate(entry.date);
-      const oldCell = data[entry.rowIndex - 1] && data[entry.rowIndex - 1][col.date];
-      if (!oldCell) return true;
-      return _dateChanged(new Date(oldCell), newDate);
+    // Resolve every target row BEFORE writing anything, so a rejected request changes nothing.
+    const plan = [];
+    let nextNewRow = data.length + 1; // data.length === getLastRow() — already in memory
+    let needsSort  = false;           // row order can change: new row, or a changed Date/Group
+    let relocated  = false;           // a row was not where the client thought it was
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(entry.date)) || SCHEDULE_GROUPS.indexOf(entry.group) < 0) {
+        return { success: false, error: 'Invalid date or group' };
+      }
+      if (entry.rowIndex) {
+        const orig = entry.orig || entry;
+        const row  = _findScheduleRow(sched, { rowIndex: entry.rowIndex, date: orig.date, group: orig.group });
+        if (!row) return _staleResult();
+        if (row !== entry.rowIndex) relocated = true;
+        if (orig.date !== entry.date || orig.group !== entry.group) needsSort = true;
+        plan.push({ entry: entry, row: row });
+      } else {
+        // (Date, Group) identifies an event row — never append a second one.
+        if (_findScheduleRow(sched, { date: entry.date, group: entry.group })) {
+          return _staleResult('That date is already scheduled. The list has been refreshed — edit the existing event instead.');
+        }
+        needsSort = true;
+        plan.push({ entry: entry, row: nextNewRow++ });
+      }
+    }
+
+    const targetRows = plan.map(function(p) { return p.row; });
+    const removeRows = [];
+    (removeRefs || []).forEach(function(ref) {
+      const row = _findScheduleRow(sched, ref);
+      if (row && targetRows.indexOf(row) < 0 && removeRows.indexOf(row) < 0) removeRows.push(row);
     });
 
-    let nextNewRow = data.length + 1; // data.length === getLastRow() — already in memory, no extra read
-    entries.forEach(function(entry) {
-      const dateObj = _parseDate(entry.date);
+    plan.forEach(function(p) {
+      const entry   = p.entry;
       const rowData = new Array(numCols).fill('');
       const s = function(key, v) { if (col[key] !== undefined) rowData[col[key]] = v; };
-      s('date',        dateObj);
+      s('date',        _parseDate(entry.date));
       s('group',       entry.group);
       s('eventType',   entry.eventType);
       s('venue',       entry.venue       || '');
@@ -327,45 +444,68 @@ function saveRosterEntries(entries) {
       s('attendees',   entry.attendees   || '');
 
       // Set time cell to plain text before writing so Sheets never auto-converts '18:30' to a Date.
-      const targetRow = entry.rowIndex || nextNewRow;
-      if (!entry.rowIndex) nextNewRow++;
-      if (col.time !== undefined) sheet.getRange(targetRow, col.time + 1).setNumberFormat('@');
-      sheet.getRange(targetRow, 1, 1, numCols).setValues([rowData]);
+      if (col.time !== undefined) sheet.getRange(p.row, col.time + 1).setNumberFormat('@');
+      sheet.getRange(p.row, 1, 1, numCols).setValues([rowData]);
     });
+
+    // Bottom-up so each delete leaves the rows above it where they were.
+    removeRows.sort(function(a, b) { return b - a; }).forEach(function(row) { sheet.deleteRow(row); });
 
     SpreadsheetApp.flush(); // commit writes before sort so getLastColumn() sees col M
     _clearEntriesCache();
-    if (needsSort) {
-      sortRosterSheet(sheet, nextNewRow - 1, dataStartRow);
-      return { success: true };
-    }
-    return { success: true, stable: true }; // rowIndices unchanged — client can skip loadData()
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+    if (needsSort) sortRosterSheet(sheet, nextNewRow - 1 - removeRows.length, dataStartRow, col);
+
+    return { success: true, stable: !(needsSort || relocated || removeRows.length) };
+  });
 }
 
-function deleteRosterEntry(rowIndex) {
-  try {
-    SpreadsheetApp.openById(SPREADSHEET_ID)
-      .getSheetByName(SCHEDULE_SHEET_NAME)
-      .deleteRow(rowIndex);
+// refs: [{rowIndex, date, group}]. All rows are deleted in ONE locked call, bottom-up —
+// separate calls run concurrently, and whichever ran second would hit a shifted row.
+function deleteRosterEntries(refs) {
+  return _withWriteLock(function() {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SCHEDULE_SHEET_NAME);
+    if (!sheet) return { success: false, error: 'Schedule sheet not found' };
+    const sched = _readSchedule(sheet);
+    if (sched.col.date === undefined || sched.col.group === undefined) {
+      return { success: false, error: 'Schedule sheet is missing its Date or Group header' };
+    }
+
+    const rows = [];
+    (refs || []).forEach(function(ref) {
+      const row = _findScheduleRow(sched, ref);
+      if (row && rows.indexOf(row) < 0) rows.push(row);
+    });
+    if (rows.length === 0) return _staleResult();
+
+    rows.sort(function(a, b) { return b - a; }).forEach(function(row) { sheet.deleteRow(row); });
     _clearEntriesCache();
     return { success: true };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+  });
 }
 
 // ---- Members CRUD ----
 
-function saveMember(member) {
-  try {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(MEMBERS_SHEET_NAME);
-    if (!sheet) return { success: false, error: 'Members sheet not found' };
+// Members tab: row 1 is the notice row and row 2 the headers, unless row 1 is the header row.
+function _membersFirstDataRow(colA) {
+  return _normalizeStr(colA[0][0]) === 'name' ? 2 : 3;
+}
 
-    const updatedAt = new Date();
+// member.origName: for an edit, the name the row held when the client loaded it.
+function saveMember(member) {
+  return _withWriteLock(function() {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(MEMBERS_SHEET_NAME);
+    if (!sheet) return { success: false, error: 'Members sheet not found' };
+    if (!String(member.name || '').trim()) return { success: false, error: 'Name is required' };
+
+    let targetRow;
+    if (member.rowIndex) {
+      const colA = _readColA(sheet);
+      targetRow = _findRowByColA(colA, _membersFirstDataRow(colA), member.rowIndex, member.origName);
+      if (!targetRow) return _staleResult();
+    } else {
+      targetRow = sheet.getLastRow() + 1;
+    }
+
     const rowData = [
       member.name,
       member.group,
@@ -376,32 +516,30 @@ function saveMember(member) {
       member.active        !== false,
       member.roleType      || 'Adult',
       member.canDrive      === true,
-      updatedAt,
+      new Date(),
       member.birthday      || ''
     ];
 
-    const targetRow = member.rowIndex || (sheet.getLastRow() + 1);
     // Set birthday cell to plain text before writing so Sheets doesn't auto-convert the date string.
     if (member.birthday) sheet.getRange(targetRow, 11).setNumberFormat('@');
     sheet.getRange(targetRow, 1, 1, 11).setValues([rowData]);
 
     _clearMembersCache();
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+    return { success: true, rowIndex: targetRow };
+  });
 }
 
-function deleteMember(rowIndex) {
-  try {
-    SpreadsheetApp.openById(SPREADSHEET_ID)
-      .getSheetByName(MEMBERS_SHEET_NAME)
-      .deleteRow(rowIndex);
+function deleteMember(rowIndex, name) {
+  return _withWriteLock(function() {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(MEMBERS_SHEET_NAME);
+    if (!sheet) return { success: false, error: 'Members sheet not found' };
+    const colA = _readColA(sheet);
+    const row  = _findRowByColA(colA, _membersFirstDataRow(colA), rowIndex, name);
+    if (!row) return _staleResult();
+    sheet.deleteRow(row);
     _clearMembersCache();
     return { success: true };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+  });
 }
 
 // ---- Lyrics CRUD ----
@@ -428,38 +566,38 @@ function getLyrics(ss) {
   return lyrics;
 }
 
+// lyric.origName: for an edit, the song name the row held when the client loaded it.
 function saveLyric(lyric) {
-  try {
-    const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(LYRICS_SHEET_NAME);
+  return _withWriteLock(function() {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(LYRICS_SHEET_NAME);
     if (!sheet) return { success: false, error: 'Lyrics sheet not found' };
+    if (!String(lyric.songName || '').trim()) return { success: false, error: 'Song name is required' };
 
     const rowData = [lyric.songName, lyric.copyCount || 0, new Date()];
-
+    let targetRow;
     if (lyric.rowIndex) {
-      sheet.getRange(lyric.rowIndex, 1, 1, 3).setValues([rowData]);
-      _clearLyricsCache();
-      return { success: true, rowIndex: lyric.rowIndex };
+      targetRow = _findRowByColA(_readColA(sheet), 2, lyric.rowIndex, lyric.origName);
+      if (!targetRow) return _staleResult();
+      sheet.getRange(targetRow, 1, 1, 3).setValues([rowData]);
     } else {
       sheet.appendRow(rowData);
-      _clearLyricsCache();
-      return { success: true, rowIndex: sheet.getLastRow() };
+      targetRow = sheet.getLastRow();
     }
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+    _clearLyricsCache();
+    return { success: true, rowIndex: targetRow };
+  });
 }
 
-function deleteLyric(rowIndex) {
-  try {
-    SpreadsheetApp.openById(SPREADSHEET_ID)
-      .getSheetByName(LYRICS_SHEET_NAME)
-      .deleteRow(rowIndex);
+function deleteLyric(rowIndex, songName) {
+  return _withWriteLock(function() {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(LYRICS_SHEET_NAME);
+    if (!sheet) return { success: false, error: 'Lyrics sheet not found' };
+    const row = _findRowByColA(_readColA(sheet), 2, rowIndex, songName);
+    if (!row) return _staleResult();
+    sheet.deleteRow(row);
     _clearLyricsCache();
     return { success: true };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+  });
 }
 
 // ---- Helpers ----
@@ -486,27 +624,21 @@ function _createDropdown(values) {
   return SpreadsheetApp.newDataValidation().requireValueInList(values, true).setAllowInvalid(false).build();
 }
 
-function _dateChanged(oldDate, newDate) {
-  return oldDate.getFullYear() !== newDate.getFullYear() ||
-         oldDate.getMonth()    !== newDate.getMonth()    ||
-         oldDate.getDate()     !== newDate.getDate();
-}
-
 // Parses a 'YYYY-MM-DD' string into a local Date without timezone shift.
 function _parseDate(dateStr) {
   const p = dateStr.split('-');
   return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
 }
 
-function sortRosterSheet(sheet, lastRow, dataStartRow) {
-  // lastRow and dataStartRow may be passed from saveRosterEntries to avoid extra reads.
-  // When called standalone (e.g. from the editor), they default to sheet reads.
+function sortRosterSheet(sheet, lastRow, dataStartRow, col) {
+  // lastRow, dataStartRow and col (the _rosterColMap result) are passed from saveRosterEntries
+  // to avoid extra reads; without them this falls back to sheet reads and columns A/B.
   const _lastRow      = lastRow      || sheet.getLastRow();
   const _dataStartRow = dataStartRow || (_normalizeStr(sheet.getRange(1, 1).getValue()) === 'date' ? 2 : 3);
   if (_lastRow < _dataStartRow) return;
   sheet.getRange(_dataStartRow, 1, _lastRow - _dataStartRow + 1, sheet.getLastColumn()).sort([
-    { column: 1, ascending: true },
-    { column: 2, ascending: true }
+    { column: col ? col.date  + 1 : 1, ascending: true },
+    { column: col ? col.group + 1 : 2, ascending: true }
   ]);
 }
 

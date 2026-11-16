@@ -196,8 +196,9 @@ Only required when adding a new column or renaming an existing header. Steps:
 | v1.46.1 | Refresh button (↻) in header alongside About; `refreshData()` spins the icon then calls `loadData()`; `renderView()` clears spin on completion. Future real-event extension capped at 2 months (61 days) to avoid rendering a huge list | n/a |
 | v1.46.2 | Fix: `_buildCombinedShareText` Combined branch was missing the Older Sunday School section; added after JAG 2, matching Youth Hour ordering (JAG1 → JAG2 → Older SS → Adults) | n/a |
 | v1.47.0 | Performance: (1) `CacheService` TTL 60s → 6h via `CACHE_TTL` const — initial loads & refresh now hit cache except after a write (writes still invalidate precisely). (2) `doGet()` SSRs Schedule entries only via new `getScheduleData()` (1 sheet read, not 3); Members + Lyrics fetched by a background `loadData()` after first paint. (3) PWA manifest enriched (`id`, `orientation`, separate `any`+`maskable` icons) — kept as same-origin Blob (cross-origin CDN manifest would break scope). NOTE: true instant/offline launch from home screen is impossible on raw Apps Script (no service worker in the GAS iframe sandbox) — requires re-architecture | n/a |
+| v1.48.0 | Write safety + bug fixes from full code review. **Server:** all writes run under `LockService` (`_withWriteLock`); a client `rowIndex` is now only a hint — rows are verified by identity (Schedule: Date + Group via `_findScheduleRow`; Members/Lyrics: column A via `_findRowByColA`) and a mismatch is rejected with `stale:true` instead of writing/deleting by position; `saveRosterEntries(entries, removeRefs)` deletes leftover per-group rows in the same call and refuses to append a second row for an existing Date + Group; `deleteRosterEntry(rowIndex)` replaced by `deleteRosterEntries(refs)` (one call, bottom-up); `saveMember`/`saveLyric` take `origName` and return `rowIndex`; `deleteMember`/`deleteLyric` take the expected name; `getAllData(force)` bypasses the cache; `sortRosterSheet` sorts by the mapped Date/Group columns. **Client:** `submitForm` collapsed to one save path (`single` "Both" row vs per-group rows) — fixes Save button stuck on "Saving…" after a server error, Combined→Separated LG producing a Group="Both" Separated row, and Separated→Combined leaving stale cards/shifted rowIndices; Save & Copy copies during the tap (iOS refuses clipboard writes from the server callback); FAB defaults to the first unscheduled Friday and a new event is refused on an already-scheduled date; refresh button force-reloads from the sheet and its spinner stops on failure; `parseISODate()` + `formatDateLong` without forced Perth timezone fix off-by-one dates on devices outside Perth; toast wraps long messages. **Deploy Code.gs and Index.html together** — anyone with the app already open must close and reopen it | n/a |
 
-### Current schema (v1.29.2, 13 columns — Schedule tab)
+### Current schema (v1.43.0, 14 columns — Schedule tab)
 > Row 1: portal notice (merged, frozen). Row 2: column headers. Row 3+: data.
 > **Row structure**: Separated LG → 2 rows (JAG1 + JAG2). All other event types → 1 row (Group="Both").
 | Col | Sheet Header | JS field | Notes |
@@ -215,6 +216,9 @@ Only required when adding a new column or renaming an existing header. Steps:
 | K | Reporting | reporting | |
 | L | Notes | notes | Special events: `Label: Value\n...` per line |
 | M | Last Updated | updatedAt | Auto-stamped; do not edit |
+| N | Attendees | attendees | Comma-separated full member names ticked in the form's attendee panel; blank = not recorded (share lists fall back to all active members) |
+
+- **Row identity is Date + Group** — there is at most one row per (Date, Group). The server refuses to append a duplicate.
 
 ### Members tab schema (v1.35.0, 11 columns)
 | Col | Sheet Header | Notes |
@@ -242,11 +246,24 @@ Only required when adding a new column or renaming an existing header. Steps:
 | B | Copy Count | Number of physical lyric sheet copies (number, default 0) |
 | C | Last Updated | Auto-stamped on every save; do not edit |
 
-- Lyrics are **lazy-loaded** via `getLyrics()` only when the user navigates to the Lyrics tab (`_lyricsLoaded` flag prevents repeated fetches)
-- CRUD: `getLyrics(ss)`, `saveLyric(lyric)`, `deleteLyric(rowIndex)` in Code.gs
-- Client state: `allLyrics`, `_lyricsLoaded`, `editingLyric` in Index.html
+- Lyrics arrive with Members in `getAllData()` (background `loadData()` after first paint) — there is no separate lazy fetch
+- CRUD: `getLyrics(ss)`, `saveLyric(lyric)` (edit sends `origName`), `deleteLyric(rowIndex, songName)` in Code.gs
+- Client state: `allLyrics`, `editingLyric` in Index.html
 
 ---
+
+## Write Safety Rules (v1.48.0)
+
+Rows have no ID column — a row's position is its only handle, and positions move whenever anyone adds, deletes or sorts rows. A page left open (very common for the home-screen app) holds old positions. So:
+
+1. **Never write or delete by a bare `rowIndex`.** A `rowIndex` from the client is a hint. The server must confirm the row still holds what the client thinks it holds, and search for it if not:
+   - Schedule: `_findScheduleRow(sched, {rowIndex, date, group})` — client sends these via `_entryRef(e)`; an edited entry carries `orig: {date, group}`
+   - Members / Lyrics: `_findRowByColA(colA, firstDataRow, rowIndex, expectedName)` — client sends `origName` (save) or the name (delete)
+2. **Not found → reject with `_staleResult()`** (`{success:false, stale:true, error}`). Never fall back to the position. The client handles it in `_showServerError(result)`: toast, close the form, `loadData(true)`.
+3. **Every write function body runs inside `_withWriteLock(function() { ... })`** — it takes the script lock, flushes, and converts exceptions to `{success:false, error}`.
+4. **Multi-row changes are one server call** (`saveRosterEntries(entries, removeRefs)`, `deleteRosterEntries(refs)`). Separate `google.script.run` calls execute concurrently and in no guaranteed order.
+5. Resolve all rows **before** the first write so a rejected request changes nothing; delete rows bottom-up.
+6. A write that moves rows must not return `stable:true` — the client skips its reload only when `stable` is true.
 
 ---
 
@@ -258,7 +275,7 @@ Run `formatSheets()` from the Apps Script editor any time to apply human-readabl
 | Element | Roster | Members |
 |---------|--------|---------|
 | Column widths | Per field (see schema table) | Fixed per column |
-| Header freeze | Row 1 | Row 1 |
+| Header freeze | Rows 1–2 (notice + headers) | Rows 1–2 (notice + headers) |
 | Alternating row colours | ✓ light purple / white | ✓ light purple / white |
 | Date format | `ddd dd/mm/yyyy` on Date col | — |
 | Datetime format | `dd/mm/yyyy hh:mm` on Last Updated | — |
@@ -299,23 +316,29 @@ Run `formatSheets()` from the Apps Script editor any time to apply human-readabl
 
 - `displayName(fullName)` — first name only unless duplicate first name among active members
 - `resolveDisplayName(val)` — reverse lookup from display name back to full name on save
-- `buildSelect(id, options, selected)` — renders `<input>` + `<datalist>` for free-text override; options show display names
+- `buildSelect(id, options, selected, maxlength)` — renders a text `<input>` + custom dropdown (`.dd-list`, `ddOpen/ddFilter/ddPick`) so the user can pick or type free text; options show display names
 - `suggestEventType(date)` — always drives the default event type preload (never use stored `eventType` as default)
 - After save/delete: call `finishSave(msg, skipRefresh)` — sets `currentView='home'`, calls `setActiveNav('home')`, then `loadData()` unless `skipRefresh=true`
-- `submitForm` has 4 explicit paths: Cancelled/Replaced → "Both" entry; Special → "Both" entry; Combined → "Both" entry; Separated LG → per-group entries
+- `submitForm` builds `toSave` in two shapes — `single` (Cancelled/Replaced, Special, Youth Hour, Combined → one "Both" row, plus `removeRefs` for any per-group rows left on that date) or Separated LG (one row per `_formGroups()` group; a "Both" row being converted is reused for the first group) — then makes ONE `saveRosterEntries(toSave, removeRefs)` call. Do not add a second save/delete call for the same action
+- `_formGroups()` — groups the Separated LG form is for: the per-group rows being edited, else `activeGroups` (new event, or a "Both" event being converted). Use it everywhere instead of `editingEntries.map(e => e.group)`
+- `_entryRef(e)` → `{rowIndex, date, group}` — the only form in which a schedule row is referenced to the server (see Write Safety Rules)
+- `_showServerError(result)` — every `!result.success` branch goes through this. It does not re-enable the Save button, so call `_setFormSaving(false)` / `_setModalSaving(false)` before it
+- `parseISODate('YYYY-MM-DD')` — local-midnight Date for a calendar date. Never `new Date('YYYY-MM-DD')` (UTC) and never format a calendar date with a forced `timeZone`
+- `loadData(force)` — `force=true` bypasses the server cache (`getAllData(true)`); used by the refresh button and after a stale rejection
+- `_nextOpenFriday()` — FAB default date: first upcoming Friday with no entries. A new event on a date that already has one is refused in `submitForm` (only adding the other group to a Separated LG is allowed)
 - `buildEventCard` combined section: `entries.find(e => e.group === 'Both') || entries.find(e => e.group === 'JAG1')` — handles both new and legacy formats
-- **Attendance cache**: `attendanceCache` keyed by `'YYYY-MM-DD'` (combined) or `'YYYY-MM-DD:JAG1'`/`'YYYY-MM-DD:JAG2'` (separated). Populated by `saveAttendanceFromForm(date, eventType)` on form submit. Session-only — no sheet persistence
+- **Attendance cache**: `attendanceCache` keyed by `'YYYY-MM-DD'` (combined) or `'YYYY-MM-DD:JAG1'`/`'YYYY-MM-DD:JAG2'` (separated). Seeded from each entry's `attendees` column by `_applyAttendanceFromEntries()` on load; updated by `saveAttendanceFromForm(date, eventType)` on form submit and persisted to the sheet's Attendees column with the entry
 - `buildAttendeePanel(date, eventType)` — collapsible `<details>` panel appended to `form-sections` by `rebuildSections()`. Not shown for Cancelled/Replaced/Special. Uses `createElement`/`createTextNode` (no innerHTML for member data)
-- `getActiveForShare(dateISO, group?)` — returns attendance-filtered member list for `+ 👥` share buttons. Falls back to all active if no cache entry. Only affects `shareCombinedWithNames` and `shareGroupWithNames` — basic Share/Share All buttons are unaffected
-- `_buildCombinedShareText(friday, entries)` — pure text builder for combined/Youth Hour share message; used by `shareCombinedWithNames` and auto-copy in `submitForm` path 3
-- `_buildGroupShareText(friday, entryOrArr)` — pure text builder for per-group (JAG1/JAG2) share message; used by `shareGroupWithNames` and auto-copy in `submitForm` path 4
-- `_copyTextSilent(text)` — clipboard write with no toast (used by Save & Copy auto-copy; the `finishSave` toast covers user feedback)
+- `getActiveForShare(dateISO, group?)` — returns the attendance-filtered member list for share text. Falls back to all active if no cache entry. Only affects `_buildCombinedShareText` and `_buildGroupShareText` — `generateShareText` (Special/Cancelled/Share All) lists no names
+- `_buildCombinedShareText(friday, entries)` — pure text builder for combined/Youth Hour share message; used by `shareCombinedWithNames` and Save & Copy in `submitForm`
+- `_buildGroupShareText(friday, entryOrArr)` — pure text builder for per-group (JAG1/JAG2) share message; used by `shareGroupWithNames` and Save & Copy in `submitForm`
+- `_copyTextSilent(text)` — clipboard write with no toast (used by Save & Copy; the `finishSave` toast covers user feedback). Save & Copy must copy **synchronously in `submitForm`, before the server call** — iOS Safari rejects clipboard writes made from the async success handler
 - Nav tabs: Schedule (home) | Lyrics | Members — 3 tabs only; "Add" is replaced by FAB (`#fab-add`)
-- `setActiveNav(view)` maps 'add'→'home' internally; iterates `['home','members','lyrics']` — do not inline this pattern
-- `_updateFab()` — shows/hides `#fab-add` and sets its title; visible on `home`, `members`, `lyrics` views; call it everywhere `currentView` changes: `showView`, `openEditEntries`, `openAddForDate`, `finishSave`, `renderView`
-- `fabAction()` — FAB click dispatcher: `home` → `showView('add')`, `members` → `openMemberForm(null)`, `lyrics` → `openLyricForm(null)`
-- `_historicalValues(field)` — returns unique non-empty values of `allEntries[field]` sorted by frequency (most-used first); used as picklist options for venue and food in `buildSelect` calls inside `rebuildSections`
-- `_bdaySelects(birthday)` — generates Month + Day `<select>` pair for birthday field in `openMemberForm`; birthday stored as `MM-DD`; pre-populates from existing value (handles both `MM-DD` and legacy `YYYY-MM-DD`)
+- `setActiveNav(view)` iterates `['home','members','lyrics']` — do not inline this pattern (there is no 'add' view; the Schedule form is a modal)
+- `_updateFab()` — shows/hides `#fab-add` and sets its title; visible on `home`, `members`, `lyrics` views; call it everywhere `currentView` changes: `showView`, `finishSave`, `renderView`
+- `fabAction()` — FAB click dispatcher: `home` → `openAddForDate(_nextOpenFriday())`, `members` → `openMemberForm(null)`, `lyrics` → `openLyricForm(null)`
+- `_historicalValues(field)` — returns unique non-empty values of `allEntries[field]` from the last year, sorted by frequency (most-used first); used as picklist options for venue, food, P&W and organiser in `buildSelect` calls inside `rebuildSections`
+- `_bdaySelects(birthday)` — generates Day / Month / Year (optional) `<select>`s for the birthday field in `openMemberForm`; stored as `MM-DD`, or `YYYY-MM-DD` when a year is chosen; pre-populates from either form
 - Card footers: use `buildCardFooter(friday, entries, ts)` — do not duplicate the Share/Edit button HTML
 - Encoding entries for `onclick`: use `encodeEntries(obj)` — replaces `JSON.stringify(obj).split('"').join('&quot;')`
 
