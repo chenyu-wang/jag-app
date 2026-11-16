@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.48.0 (2026-11-16) -->
+  <!-- Version: 1.48.1 (2026-11-16) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -299,6 +299,8 @@ let editingLyric   = null;
 let dashPast   = 4;   // how many past weeks shown in dashboard
 let dashFuture = 4;   // how many future weeks shown in dashboard
 let _dashBusy  = false;
+let _homeMorePast   = false; // set by renderHome: earlier loaded dates exist above the rendered window
+let _homeMoreFuture = false; // set by renderHome: later loaded dates exist below the rendered window
 let _scheduleDatesCache  = null;  // D: invalidated whenever allEntries changes
 let _entriesByDateCache  = null;  // invalidated whenever allEntries changes
 let _dupFirstNamesCache  = null;  // F: invalidated whenever allMembers changes
@@ -348,14 +350,16 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('content').addEventListener('scroll', function() {
     if (currentView !== 'home' || _dashBusy) return;
     const el = this;
-    if (el.scrollTop < 80) {
+    // Only grow the window when there is something more to show. Without these checks the whole
+    // list was rebuilt on every scroll frame for as long as the user stayed near either end.
+    if (el.scrollTop < 80 && _homeMorePast) {
       _dashBusy = true;
       const oldH = el.scrollHeight;
       dashPast += 4;
       renderHome(false);
       el.scrollTop += el.scrollHeight - oldH; // sync: correct position before browser paints, no flash
       requestAnimationFrame(function() { _dashBusy = false; });
-    } else if (el.scrollTop + el.clientHeight > el.scrollHeight - 80) {
+    } else if (el.scrollTop + el.clientHeight > el.scrollHeight - 80 && _homeMoreFuture) {
       _dashBusy = true;
       dashFuture += 4;
       renderHome(false);
@@ -608,6 +612,8 @@ function renderHome(resetWindow) {
     if (fridays[i] >= twoMonthsLater) break;
     if (entriesByDate.get(toISODate(fridays[i]))) endIdx = i;
   }
+  _homeMorePast   = startIdx > 0;
+  _homeMoreFuture = endIdx < fridays.length - 1;
 
   if (startIdx === 0) {
     if (_hasMorePast) {
