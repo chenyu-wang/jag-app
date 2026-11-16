@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.49.0 (2026-11-16) -->
+  <!-- Version: 1.50.0 (2026-11-16) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -103,7 +103,7 @@
     .form-section-title.jag2 { color: #6d28d9; }
     .field { margin-bottom: 12px; }
     label { display: block; font-size: .78rem; font-weight: 600; color: #475569; margin-bottom: 4px; }
-    select, input[type=text], input[type=date], input[type=time], input[type=number] {
+    select, input[type=text], input[type=password], input[type=date], input[type=time], input[type=number] {
       width: 100%; padding: 9px 10px; border: 1px solid #e2e8f0; border-radius: 8px;
       font-size: 1rem; color: #1e293b; background: #fff; appearance: none; -webkit-appearance: none;
       outline: none; transition: border-color .15s;
@@ -307,6 +307,9 @@ let _dupFirstNamesCache  = null;  // F: invalidated whenever allMembers changes
 let _activeCache         = null;  // invalidated whenever allMembers changes
 let _loadGen = 0;               // incremented on each loadData() call; stale responses are discarded
 let _fullLoadInFlight = false;  // a loadData() that will replace allEntries has not answered yet
+let _membersLoaded = false;     // false until the first getAllData() answer (members are not in the SSR data)
+let _membersLocked = false;     // server says a Members passcode is set and we have not supplied it
+let _membersPass   = '';        // the passcode once entered — kept in memory only, gone when the app is closed
 let attendanceCache = {};        // keyed by 'YYYY-MM-DD' (combined) or 'YYYY-MM-DD:GROUP' (separated); value: Set<memberName>
 let _modalHistoryPushed = false; // true while a modal is open and a history entry was pushed for Android back
 let _hasMorePast        = false; // true when the sheet has entries before the loaded window
@@ -385,15 +388,23 @@ function loadData(force, skipEntries) {
   // Increment generation so any in-flight response from a previous loadData() call is discarded.
   const gen = ++_loadGen;
   _fullLoadInFlight = !skipEntries;
+  const passSent = _membersPass;
   google.script.run
     .withSuccessHandler(function(data) {
       if (gen !== _loadGen) return;  // stale response — a newer loadData() already fired
       _fullLoadInFlight = false;
       if (data.entries) _applyServerEntries(data);
-      allMembers     = data.members || [];
+      // If the Members tab was unlocked (or re-locked) while this request was in flight, its
+      // member list was built for the old state — keep what we have.
+      if (passSent === _membersPass) {
+        allMembers     = data.members || [];
+        _membersLocked = !!data.membersLocked;
+        if (_membersLocked) _membersPass = ''; // passcode changed or blocked — ask again
+        _dupFirstNamesCache = null;  // F: invalidate on fresh data
+        _activeCache = null;
+      }
+      _membersLoaded = true;
       allLyrics      = data.lyrics  || [];
-      _dupFirstNamesCache = null;  // F: invalidate on fresh data
-      _activeCache = null;
       const loadingEl = document.getElementById('loading-msg');
       if (loadingEl) loadingEl.remove();
       if (data.version) {
@@ -419,7 +430,7 @@ function loadData(force, skipEntries) {
       }
       console.error('getAllData failed:', err);
     })
-    .getAllData(!!force, !!skipEntries);
+    .getAllData(!!force, !!skipEntries, passSent);
 }
 
 function today() {
@@ -439,14 +450,15 @@ function setActiveNav(view) {
 function _updateFab() {
   const fab = document.getElementById('fab-add');
   const titles = { home: 'Add event', members: 'Add member', lyrics: 'Add song' };
-  const show = currentView in titles;
+  // No "add member" button while the Members tab is still loading or locked
+  const show = currentView in titles && !(currentView === 'members' && (!_membersLoaded || _membersLocked));
   fab.classList.toggle('hidden', !show);
   if (show) fab.title = titles[currentView];
 }
 
 function fabAction() {
   if      (currentView === 'home')    openAddForDate(toISODate(_nextOpenFriday()));
-  else if (currentView === 'members') openMemberForm(null);
+  else if (currentView === 'members') { if (_membersLoaded && !_membersLocked) openMemberForm(null); }
   else if (currentView === 'lyrics')  openLyricForm(null);
 }
 
@@ -459,7 +471,16 @@ function _entryRef(e) {
 // page loaded (someone else changed it), so close the form and reload straight from the sheet.
 function _showServerError(result) {
   const msg = (result && result.error) || 'Something went wrong';
-  if (result && result.stale) {
+  if (result && result.locked) {
+    // The server refused a member change: the passcode was changed or never entered. Lock up
+    // and swap the full member list for the public one.
+    _membersPass = '';
+    _membersLocked = true;
+    showToast(msg, 4000);
+    closeModal();
+    renderView();
+    loadData();
+  } else if (result && result.stale) {
     showToast(msg, 5000);
     closeModal();
     loadData(true);
@@ -1420,6 +1441,8 @@ function doDeleteEntries(refs) {
 function renderMembers() {
   const c = document.getElementById('content');
   c.innerHTML = '';
+  if (!_membersLoaded) { c.innerHTML = '<div class="loading">Loading members…</div>'; return; }
+  if (_membersLocked)  { _renderMembersLock(c); return; }
 
   const searchEl = document.createElement('input');
   searchEl.type        = 'text';
@@ -1434,6 +1457,42 @@ function renderMembers() {
   c.appendChild(listEl);
 
   _renderMembersList('');
+}
+
+// Shown instead of the member list when the server says a passcode is required. The check is
+// done by the server (unlockMembers) — until it passes, this page does not hold the full list.
+function _renderMembersLock(c) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'max-width:320px;margin:48px auto 0;text-align:center;';
+  wrap.innerHTML =
+    '<div style="font-size:2.2rem;margin-bottom:8px;">🔒</div>' +
+    '<div style="font-weight:700;margin-bottom:4px;">Members are locked</div>' +
+    '<div style="font-size:.82rem;color:#64748b;margin-bottom:16px;">Enter the leaders’ passcode to view or edit members.</div>' +
+    '<div class="field"><input type="password" id="members-pass" placeholder="Passcode" autocomplete="off" maxlength="64" style="text-align:center;" onkeydown="if(event.key===\'Enter\')submitMembersPasscode()" /></div>' +
+    '<button class="btn btn-primary" id="members-unlock-btn" onclick="submitMembersPasscode()">Unlock</button>';
+  c.appendChild(wrap);
+}
+
+function submitMembersPasscode() {
+  const input = document.getElementById('members-pass');
+  const btn   = document.getElementById('members-unlock-btn');
+  const pass  = ((input && input.value) || '').trim();
+  if (!pass) { showToast('Enter the passcode'); return; }
+  const reset = function() { btn.disabled = false; btn.textContent = 'Unlock'; input.value = ''; };
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result || !result.success) { reset(); showToast((result && result.error) || 'Wrong passcode', 3500); return; }
+      _membersPass   = pass;
+      _membersLocked = false;
+      allMembers     = result.members || [];
+      _dupFirstNamesCache = null;
+      _activeCache = null;
+      if (currentView === 'members') renderView();
+    })
+    .withFailureHandler(function(err) { reset(); showToast('Error: ' + err.message); })
+    .unlockMembers(pass);
 }
 
 function _renderMembersList(query) {
@@ -1638,7 +1697,7 @@ function submitMember() {
       _renderMembersList(_memberQ); // no reload needed: the server returned the new row's rowIndex
     })
     .withFailureHandler(function(err) { _setModalSaving(false, 'Save Member'); showToast('Error: ' + err.message); })
-    .saveMember(Object.assign({ origName: editingMember ? editingMember.name : '' }, member));
+    .saveMember(Object.assign({ origName: editingMember ? editingMember.name : '' }, member), _membersPass);
 }
 
 function confirmDeleteMember(rowIndex, name) {
@@ -1667,7 +1726,7 @@ function deleteMemberRow(rowIndex, name) {
       _renderMembersList((document.getElementById('members-search') || {}).value || '');
     })
     .withFailureHandler(err => showToast('Error: ' + err.message))
-    .deleteMember(rowIndex, name);
+    .deleteMember(rowIndex, name, _membersPass);
 }
 
 // =============================================

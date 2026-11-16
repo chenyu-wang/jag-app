@@ -1,10 +1,10 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.49.0 (2026-11-16)
+// Version: 1.50.0 (2026-11-16)
 // ============================================================
 
-const VERSION      = '1.49.0';
+const VERSION      = '1.50.0';
 const VERSION_DATE = '2026-11-16';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
@@ -24,7 +24,14 @@ const CACHE_TTL = 21600;
 // chunks (see _cachePut). 30,000 chars stays under 100 KB even at 3 bytes per character.
 const CACHE_CHUNK_CHARS = 30000;
 const CACHE_MAX_CHUNKS  = 8;
-const CACHE_KEYS = { entries: 'allData_entries', members: 'allData_members', lyrics: 'allData_lyrics' };
+const CACHE_KEYS = { entries: 'allData_entries', members: 'allData_members', lyrics: 'allData_lyrics', passFails: 'members_pass_fails' };
+
+// Members passcode. The passcode itself is NOT in this file (the repo is public): it is the
+// Script Property MEMBERS_PASSCODE (Apps Script → Project Settings → Script Properties).
+// No property = no lock, and the app behaves exactly as it did before v1.50.0.
+const MEMBERS_PASSCODE_PROP = 'MEMBERS_PASSCODE';
+const PASSCODE_MAX_FAILS    = 10;   // wrong attempts allowed (all users together) ...
+const PASSCODE_FAIL_WINDOW  = 600;  // ... before a 10-minute lockout (seconds)
 
 const SCHEDULE_GROUPS = ['JAG1', 'JAG2', 'Both'];
 
@@ -69,7 +76,9 @@ function getScheduleData() {
 // get the sheet's real contents even if it was edited directly or the cache is out of date.
 // skipEntries=true leaves the Schedule out of the response (entries: null) — used by the
 // background load right after first paint, when the page already has them from doGet().
-function getAllData(force, skipEntries) {
+// pass: the Members passcode, if the client has unlocked the Members tab. Without a valid one
+// (and when a passcode is configured) only _publicMembers() is returned, with membersLocked:true.
+function getAllData(force, skipEntries, pass) {
   const keys = [CACHE_KEYS.members, CACHE_KEYS.lyrics];
   if (!skipEntries) keys.push(CACHE_KEYS.entries);
   const cached = force ? {} : _cacheGetMany(keys); // one cache round trip for everything
@@ -86,11 +95,14 @@ function getAllData(force, skipEntries) {
     if (!lyricsData)  { lyricsData  = getLyrics(ss);  _cachePut(CACHE_KEYS.lyrics,  lyricsData);  }
   }
 
+  const membersLocked = _membersAccess(pass) !== 'granted';
+
   return {
     entries:       entriesData ? entriesData.list : null,
     hasMorePast:   entriesData ? entriesData.hasMorePast   : false,
     hasMoreFuture: entriesData ? entriesData.hasMoreFuture : false,
-    members:       membersData,
+    members:       membersLocked ? _publicMembers(membersData) : membersData,
+    membersLocked: membersLocked,
     lyrics:        lyricsData,
     version:       VERSION,
     versionDate:   VERSION_DATE
@@ -493,6 +505,57 @@ function _entriesWriteResult(ss, stable) {
   return { success: true, stable: false, entries: fresh.list, hasMorePast: fresh.hasMorePast, hasMoreFuture: fresh.hasMoreFuture };
 }
 
+// ---- Members passcode ----
+
+// 'granted' — no passcode is configured, or `pass` is correct
+// 'locked'  — a passcode is configured and `pass` is missing or wrong
+// 'blocked' — too many wrong attempts recently; even the right passcode is refused for now
+function _membersAccess(pass) {
+  const expected = String(PropertiesService.getScriptProperties().getProperty(MEMBERS_PASSCODE_PROP) || '').trim();
+  if (!expected) return 'granted';
+  const given = String(pass == null ? '' : pass).trim();
+  if (!given) return 'locked';
+  const fails = Number(_cacheGetMany([CACHE_KEYS.passFails])[CACHE_KEYS.passFails]) || 0;
+  if (fails >= PASSCODE_MAX_FAILS) return 'blocked';
+  if (given === expected) return 'granted';
+  _cachePut(CACHE_KEYS.passFails, fails + 1, PASSCODE_FAIL_WINDOW);
+  return 'locked';
+}
+
+// What everyone gets without the passcode: just enough for the Schedule to work (names in
+// pickers, attendee lists and share text, birthday reminders). Inactive members, birth years,
+// row numbers and timestamps stay on the server.
+function _publicMembers(members) {
+  return members.filter(function(m) { return m.active; }).map(function(m) {
+    return {
+      name: m.name, group: m.group, roleType: m.roleType, active: true,
+      canOrganise: m.canOrganise, canPW: m.canPW, canFacilitate: m.canFacilitate,
+      canReport: m.canReport, canDrive: m.canDrive,
+      birthday: String(m.birthday || '').replace(/^\d{4}-/, '') // MM-DD only
+    };
+  });
+}
+
+// Checks the passcode and, if right, returns the full member list.
+function unlockMembers(pass) {
+  try {
+    const access = _membersAccess(pass);
+    if (access === 'blocked') return { success: false, error: 'Too many wrong attempts — try again in 10 minutes.' };
+    if (access !== 'granted') return { success: false, error: 'Wrong passcode' };
+    let members = _cacheGetMany([CACHE_KEYS.members])[CACHE_KEYS.members];
+    if (!members) { members = getMembers(); _cachePut(CACHE_KEYS.members, members); }
+    return { success: true, members: members };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// For member writes: null when allowed, otherwise the failure to return to the client.
+function _membersWriteDenied(pass) {
+  if (_membersAccess(pass) === 'granted') return null;
+  return { success: false, locked: true, error: 'Enter the Members passcode to make changes.' };
+}
+
 // ---- Members CRUD ----
 
 // Members tab: row 1 is the notice row and row 2 the headers, unless row 1 is the header row.
@@ -501,7 +564,9 @@ function _membersFirstDataRow(colA) {
 }
 
 // member.origName: for an edit, the name the row held when the client loaded it.
-function saveMember(member) {
+function saveMember(member, pass) {
+  const denied = _membersWriteDenied(pass);
+  if (denied) return denied;
   return _withWriteLock(function() {
     const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(MEMBERS_SHEET_NAME);
     if (!sheet) return { success: false, error: 'Members sheet not found' };
@@ -539,7 +604,9 @@ function saveMember(member) {
   });
 }
 
-function deleteMember(rowIndex, name) {
+function deleteMember(rowIndex, name, pass) {
+  const denied = _membersWriteDenied(pass);
+  if (denied) return denied;
   return _withWriteLock(function() {
     const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(MEMBERS_SHEET_NAME);
     if (!sheet) return { success: false, error: 'Members sheet not found' };
@@ -616,7 +683,8 @@ function deleteLyric(rowIndex, songName) {
 // A value is stored as chunks  <key>_0 … <key>_n-1, each "<stamp>|<n>|<part>". The stamp is
 // the same for every chunk of one put, so chunks from two different puts are never combined.
 
-function _cachePut(key, value) {
+// ttl (seconds) defaults to CACHE_TTL.
+function _cachePut(key, value, ttl) {
   try {
     const json = JSON.stringify(value);
     const n    = Math.max(1, Math.ceil(json.length / CACHE_CHUNK_CHARS));
@@ -630,7 +698,7 @@ function _cachePut(key, value) {
     for (let i = 0; i < n; i++) {
       parts[key + '_' + i] = stamp + '|' + n + '|' + json.substr(i * CACHE_CHUNK_CHARS, CACHE_CHUNK_CHARS);
     }
-    CacheService.getScriptCache().putAll(parts, CACHE_TTL);
+    CacheService.getScriptCache().putAll(parts, ttl || CACHE_TTL);
   } catch (e) {
     Logger.log('Cache put failed for ' + key + ': ' + e);
   }
