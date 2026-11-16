@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.48.1 (2026-11-16) -->
+  <!-- Version: 1.49.0 (2026-11-16) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -306,6 +306,7 @@ let _entriesByDateCache  = null;  // invalidated whenever allEntries changes
 let _dupFirstNamesCache  = null;  // F: invalidated whenever allMembers changes
 let _activeCache         = null;  // invalidated whenever allMembers changes
 let _loadGen = 0;               // incremented on each loadData() call; stale responses are discarded
+let _fullLoadInFlight = false;  // a loadData() that will replace allEntries has not answered yet
 let attendanceCache = {};        // keyed by 'YYYY-MM-DD' (combined) or 'YYYY-MM-DD:GROUP' (separated); value: Set<memberName>
 let _modalHistoryPushed = false; // true while a modal is open and a history entry was pushed for Android back
 let _hasMorePast        = false; // true when the sheet has entries before the loaded window
@@ -323,16 +324,7 @@ function _esc(s) {
 // =============================================
 document.addEventListener('DOMContentLoaded', function() {
   if (_INITIAL_DATA) {
-    allEntries      = _INITIAL_DATA.entries || [];
-    allMembers      = _INITIAL_DATA.members || [];
-    allLyrics       = _INITIAL_DATA.lyrics  || [];
-    _hasMorePast    = !!_INITIAL_DATA.hasMorePast;
-    _hasMoreFuture  = !!_INITIAL_DATA.hasMoreFuture;
-    _scheduleDatesCache = null;
-    _entriesByDateCache = null;
-    _dupFirstNamesCache = null;
-    _activeCache = null;
-    _applyAttendanceFromEntries(allEntries);
+    _applyServerEntries(_INITIAL_DATA);
     const loadingEl = document.getElementById('loading-msg');
     if (loadingEl) loadingEl.remove();
     if (_INITIAL_DATA.version) {
@@ -341,8 +333,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     renderView();
     // SSR ships entries only — pull Members + Lyrics in the background, off the
-    // critical path. Home already rendered; this re-renders once they arrive.
-    if (!_INITIAL_DATA.members) loadData();
+    // critical path (skipEntries: the Schedule is already here, don't download it again).
+    // Home already rendered; this re-renders it in place once they arrive.
+    loadData(false, true);
   } else {
     loadData(); // fallback: SSR data unavailable, fetch async
   }
@@ -375,34 +368,45 @@ window.addEventListener('popstate', function(e) {
   }
 });
 
+// Replaces the Schedule entries with a fresh set from the server
+// (doGet's initial data, a getAllData() response, or the result of a save/delete).
+function _applyServerEntries(data) {
+  allEntries     = data.entries || [];
+  _hasMorePast   = !!data.hasMorePast;
+  _hasMoreFuture = !!data.hasMoreFuture;
+  _scheduleDatesCache = null;  // D: invalidate on fresh data
+  _entriesByDateCache = null;
+  _applyAttendanceFromEntries(allEntries);
+}
+
 // force=true bypasses the server-side cache and re-reads the sheets.
-function loadData(force) {
-  // A: version is now included in the getAllData() response — no separate getVersion() call needed
+// skipEntries=true fetches Members + Lyrics only and leaves allEntries as it is.
+function loadData(force, skipEntries) {
   // Increment generation so any in-flight response from a previous loadData() call is discarded.
   const gen = ++_loadGen;
+  _fullLoadInFlight = !skipEntries;
   google.script.run
     .withSuccessHandler(function(data) {
       if (gen !== _loadGen) return;  // stale response — a newer loadData() already fired
-      allEntries     = data.entries || [];
+      _fullLoadInFlight = false;
+      if (data.entries) _applyServerEntries(data);
       allMembers     = data.members || [];
       allLyrics      = data.lyrics  || [];
-      _hasMorePast   = !!data.hasMorePast;
-      _hasMoreFuture = !!data.hasMoreFuture;
-      _scheduleDatesCache = null;  // D: invalidate on fresh data
-      _entriesByDateCache = null;
       _dupFirstNamesCache = null;  // F: invalidate on fresh data
       _activeCache = null;
-      _applyAttendanceFromEntries(allEntries);
       const loadingEl = document.getElementById('loading-msg');
       if (loadingEl) loadingEl.remove();
       if (data.version) {
         const el = document.getElementById('header-sub');
         if (el) el.textContent = 'v' + data.version;
       }
-      renderView();
+      // If the Schedule is already on screen this is a refresh of what the user is looking at:
+      // redraw it in place instead of jumping back to the "Next LG" card.
+      renderView(currentView === 'home' && !!document.getElementById('upcoming-card'));
     })
     .withFailureHandler(function(err) {
       if (gen !== _loadGen) return;
+      _fullLoadInFlight = false;
       const btn = document.getElementById('refresh-btn');
       if (btn) btn.classList.remove('spinning');
       const loadingEl = document.getElementById('loading-msg');
@@ -415,7 +419,7 @@ function loadData(force) {
       }
       console.error('getAllData failed:', err);
     })
-    .getAllData(!!force);
+    .getAllData(!!force, !!skipEntries);
 }
 
 function today() {
@@ -492,7 +496,10 @@ function finishSave(msg, skipRefresh) {
   setActiveNav('home');
   _updateFab();
   renderHome();
-  if (!skipRefresh) loadData(); // skip when server confirmed rowIndices are stable
+  // Skipped when allEntries is already right (rows did not move, or the server sent the fresh
+  // entries back with the save). A full load still in flight would overwrite that with older
+  // data when it lands, so replace it with a new one.
+  if (!skipRefresh || _fullLoadInFlight) loadData();
 }
 
 function encodeEntries(obj) {
@@ -532,11 +539,12 @@ function refreshData() {
   loadData(true);
 }
 
-function renderView() {
+// keepScroll: redraw the Schedule where it is (same window, same scroll position).
+function renderView(keepScroll) {
   const btn = document.getElementById('refresh-btn');
   if (btn) btn.classList.remove('spinning');
   _updateFab();
-  if      (currentView === 'home')    renderHome();
+  if      (currentView === 'home')    renderHome(keepScroll ? false : undefined);
   else if (currentView === 'members') renderMembers();
   else if (currentView === 'lyrics')  renderLyrics();
 }
@@ -1338,9 +1346,13 @@ function submitForm() {
   google.script.run
     .withSuccessHandler(function(result) {
       if (!result || !result.success) { _setFormSaving(false); _showServerError(result); return; }
-      // `orig` is only for the server — keep it out of the cached entries
-      _mergeEntriesIntoCache(toSave.map(e => Object.assign({}, e, { orig: undefined })), removeRefs);
-      finishSave(copied ? 'Saved & copied!' : 'Saved!', result.stable);
+      if (result.entries) {
+        _applyServerEntries(result); // rows moved: the server sent the fresh entries with the save
+      } else {
+        // `orig` is only for the server — keep it out of the cached entries
+        _mergeEntriesIntoCache(toSave.map(e => Object.assign({}, e, { orig: undefined })), removeRefs);
+      }
+      finishSave(copied ? 'Saved & copied!' : 'Saved!', result.stable || !!result.entries);
     })
     .withFailureHandler(function(err) { _setFormSaving(false); showToast('Error: ' + err.message); })
     .saveRosterEntries(toSave, removeRefs);
@@ -1388,11 +1400,15 @@ function doDeleteEntries(refs) {
   google.script.run
     .withSuccessHandler(function(result) {
       if (!result || !result.success) { _showServerError(result); return; }
-      const gone = new Set(refs.map(function(r) { return r.rowIndex; }));
-      allEntries = allEntries.filter(function(e) { return !gone.has(e.rowIndex); });
-      _scheduleDatesCache = null;
-      _entriesByDateCache = null;
-      finishSave('Deleted');
+      if (result.entries) {
+        _applyServerEntries(result); // the server sent the fresh entries with the delete
+      } else {
+        const gone = new Set(refs.map(function(r) { return r.rowIndex; }));
+        allEntries = allEntries.filter(function(e) { return !gone.has(e.rowIndex); });
+        _scheduleDatesCache = null;
+        _entriesByDateCache = null;
+      }
+      finishSave('Deleted', !!result.entries);
     })
     .withFailureHandler(err => showToast('Error: ' + err.message))
     .deleteRosterEntries(refs);
@@ -1619,8 +1635,7 @@ function submitMember() {
       _dupFirstNamesCache = null;
       _activeCache = null;
       currentView = 'members';
-      _renderMembersList(_memberQ);
-      if (isNew) loadData(); // only new members need server rowIndex sync
+      _renderMembersList(_memberQ); // no reload needed: the server returned the new row's rowIndex
     })
     .withFailureHandler(function(err) { _setModalSaving(false, 'Save Member'); showToast('Error: ' + err.message); })
     .saveMember(Object.assign({ origName: editingMember ? editingMember.name : '' }, member));
@@ -1631,18 +1646,25 @@ function confirmDeleteMember(rowIndex, name) {
     "They won't appear in future dropdowns.", 'Yes, Remove', 'deleteMemberRow(' + rowIndex + ',' + encodeEntries(name) + ')');
 }
 
+// Removes the item at rowIndex from a Members/Lyrics list and moves every later item up one
+// row, exactly as deleting the sheet row did — so no reload is needed to keep rowIndices right.
+function _withoutRow(list, rowIndex) {
+  return list.filter(function(x) { return x.rowIndex !== rowIndex; })
+             .map(function(x) { return x.rowIndex > rowIndex ? Object.assign({}, x, { rowIndex: x.rowIndex - 1 }) : x; });
+}
+
 function deleteMemberRow(rowIndex, name) {
   closeModal();
   google.script.run
     .withSuccessHandler(function(result) {
       if (!result || !result.success) { _showServerError(result); return; }
       showToast('Member removed');
-      allMembers = allMembers.filter(function(m) { return m.rowIndex !== rowIndex; });
+      if (result.rowIndex !== rowIndex) { loadData(true); return; } // it was not where we thought — reload
+      allMembers = _withoutRow(allMembers, rowIndex);
       _dupFirstNamesCache = null;
       _activeCache = null;
       currentView = 'members';
       _renderMembersList((document.getElementById('members-search') || {}).value || '');
-      loadData(); // refresh in background to sync rowIndices
     })
     .withFailureHandler(err => showToast('Error: ' + err.message))
     .deleteMember(rowIndex, name);
@@ -2589,7 +2611,8 @@ function deleteLyricRow(rowIndex, name) {
     .withSuccessHandler(function(result) {
       if (!result || !result.success) { _showServerError(result); return; }
       showToast('Song removed');
-      allLyrics = allLyrics.filter(function(l) { return l.rowIndex !== rowIndex; });
+      if (result.rowIndex !== rowIndex) { loadData(true); return; } // it was not where we thought — reload
+      allLyrics = _withoutRow(allLyrics, rowIndex);
       _renderLyricsList(q);
     })
     .withFailureHandler(function(err) { showToast('Error: ' + err.message); })
