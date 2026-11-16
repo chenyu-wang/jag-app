@@ -1,11 +1,11 @@
 // ============================================================
 // JAG App - Google Apps Script Backend
 // Spreadsheet: https://docs.google.com/spreadsheets/d/1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4
-// Version: 1.47.0 (2026-05-31)
+// Version: 1.49.0 (2026-11-16)
 // ============================================================
 
-const VERSION      = '1.47.0';
-const VERSION_DATE = '2026-05-31';
+const VERSION      = '1.49.0';
+const VERSION_DATE = '2026-11-16';
 
 const SPREADSHEET_ID    = '1Cg9m7lUu536JlSXbY4HifWQpOw9nQ2DtBRDZRzIXIn4';
 const SCHEDULE_SHEET_NAME = 'Schedule';
@@ -14,10 +14,19 @@ const LYRICS_SHEET_NAME  = 'Lyrics';
 const APP_NOTICE      = '⚠️  Please use the JAG App to make changes — do not edit this sheet directly.\n🔗  https://tinyurl.com/JAG-App';
 
 // CacheService TTL (seconds). 21600 = 6h, the CacheService maximum.
-// Safe to keep long because every write path invalidates the relevant key precisely
-// (_clearEntriesCache / _clearMembersCache / _clearLyricsCache). Staleness can only
+// Safe to keep long because every write path refreshes or invalidates the relevant key
+// (_refreshEntriesCache / _clearMembersCache / _clearLyricsCache). Staleness can only
 // occur if the sheet is edited directly outside the app (discouraged by APP_NOTICE).
 const CACHE_TTL = 21600;
+
+// CacheService stores at most 100 KB per key, and a put() over that limit throws — which
+// would silently turn the cache off as the data grows. Values are therefore split into
+// chunks (see _cachePut). 30,000 chars stays under 100 KB even at 3 bytes per character.
+const CACHE_CHUNK_CHARS = 30000;
+const CACHE_MAX_CHUNKS  = 8;
+const CACHE_KEYS = { entries: 'allData_entries', members: 'allData_members', lyrics: 'allData_lyrics' };
+
+const SCHEDULE_GROUPS = ['JAG1', 'JAG2', 'Both'];
 
 // ---- Entry Point ----
 
@@ -42,18 +51,10 @@ function doGet() {
 
 // Lightweight initial payload for doGet(): Schedule entries + version only.
 // Members and Lyrics are deferred to a background getAllData() call after first paint,
-// keeping the blocking server render off two extra sheet reads. Shares the same
-// 'allData_entries' cache slot as getAllData(), so the background call reuses this read.
+// keeping the blocking server render off two extra sheet reads.
 function getScheduleData() {
-  const cache = CacheService.getScriptCache();
-  let entriesData;
-  try { const h = cache.get('allData_entries'); if (h) entriesData = JSON.parse(h); } catch(e) {}
-  if (!entriesData) {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const r = getRosterEntries(ss);
-    entriesData = { list: r.list, hasMorePast: r.hasMorePast, hasMoreFuture: r.hasMoreFuture };
-    try { cache.put('allData_entries', JSON.stringify(entriesData), CACHE_TTL); } catch(e) {}
-  }
+  const entriesData = _cacheGetMany([CACHE_KEYS.entries])[CACHE_KEYS.entries] ||
+                      _refreshEntriesCache(SpreadsheetApp.openById(SPREADSHEET_ID));
   return {
     entries:       entriesData.list,
     hasMorePast:   entriesData.hasMorePast,
@@ -63,42 +64,44 @@ function getScheduleData() {
   };
 }
 
-function getAllData() {
-  // C: split across three cache keys so each gets its own 100 KB slot.
-  // Each key is independently invalidated by the selective clear helpers below.
-  const cache = CacheService.getScriptCache();
-  let entriesData, membersData, lyricsData;
-  try { const h = cache.get('allData_entries'); if (h) entriesData = JSON.parse(h); } catch(e) {}
-  try { const h = cache.get('allData_members'); if (h) membersData = JSON.parse(h); } catch(e) {}
-  try { const h = cache.get('allData_lyrics');  if (h) lyricsData  = JSON.parse(h); } catch(e) {}
+// force=true skips the cache read and re-reads the sheets (then re-fills the cache).
+// Used by the header refresh button and after a "stale row" rejection, so a user can always
+// get the sheet's real contents even if it was edited directly or the cache is out of date.
+// skipEntries=true leaves the Schedule out of the response (entries: null) — used by the
+// background load right after first paint, when the page already has them from doGet().
+function getAllData(force, skipEntries) {
+  const keys = [CACHE_KEYS.members, CACHE_KEYS.lyrics];
+  if (!skipEntries) keys.push(CACHE_KEYS.entries);
+  const cached = force ? {} : _cacheGetMany(keys); // one cache round trip for everything
 
-  if (!entriesData || !membersData || !lyricsData) {
-    // B: open spreadsheet once and share across all missed fetches.
+  let entriesData = cached[CACHE_KEYS.entries];
+  let membersData = cached[CACHE_KEYS.members];
+  let lyricsData  = cached[CACHE_KEYS.lyrics];
+
+  if ((!skipEntries && !entriesData) || !membersData || !lyricsData) {
+    // Open the spreadsheet once and share it across all missed fetches.
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    if (!entriesData) {
-      const r = getRosterEntries(ss);
-      entriesData = { list: r.list, hasMorePast: r.hasMorePast, hasMoreFuture: r.hasMoreFuture };
-      try { cache.put('allData_entries', JSON.stringify(entriesData), CACHE_TTL); } catch(e) {}
-    }
-    if (!membersData) {
-      membersData = getMembers(ss);
-      try { cache.put('allData_members', JSON.stringify(membersData), CACHE_TTL); } catch(e) {}
-    }
-    if (!lyricsData) {
-      lyricsData = getLyrics(ss);
-      try { cache.put('allData_lyrics', JSON.stringify(lyricsData), CACHE_TTL); } catch(e) {}
-    }
+    if (!skipEntries && !entriesData) entriesData = _refreshEntriesCache(ss);
+    if (!membersData) { membersData = getMembers(ss); _cachePut(CACHE_KEYS.members, membersData); }
+    if (!lyricsData)  { lyricsData  = getLyrics(ss);  _cachePut(CACHE_KEYS.lyrics,  lyricsData);  }
   }
 
   return {
-    entries:       entriesData.list,
-    hasMorePast:   entriesData.hasMorePast,
-    hasMoreFuture: entriesData.hasMoreFuture,
+    entries:       entriesData ? entriesData.list : null,
+    hasMorePast:   entriesData ? entriesData.hasMorePast   : false,
+    hasMoreFuture: entriesData ? entriesData.hasMoreFuture : false,
     members:       membersData,
     lyrics:        lyricsData,
     version:       VERSION,
     versionDate:   VERSION_DATE
   };
+}
+
+// Optional: add a time-driven trigger for this (Triggers → Add Trigger → warmCache →
+// Time-driven → Hour timer → Every 4 hours). It keeps the cache filled, so opening the app
+// never has to wait for a sheet read, and direct sheet edits show up within 4 hours.
+function warmCache() {
+  getAllData(true);
 }
 
 // Load a 1-year chunk of entries adjacent to the current loaded window.
@@ -282,36 +285,148 @@ function getMembers(ss) {
   return members;
 }
 
+// ---- Write safety ----
+// A row's position is the only identity a row has in these sheets, and positions move
+// whenever anyone adds, deletes or sorts rows. Two rules keep writes on the right row:
+//   1. Every write runs under one script-wide lock (_withWriteLock), so writes never interleave.
+//   2. A rowIndex sent by a client is only a HINT. The row is verified against what the client
+//      believes it holds (Date + Group, member name, song name) and searched for if the hint
+//      is wrong. If it cannot be found the write is rejected with stale:true — it never falls
+//      back to writing or deleting by position.
+
+function _withWriteLock(fn) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+  } catch (e) {
+    return { success: false, error: 'The sheet is busy — please try again in a moment.' };
+  }
+  try {
+    const result = fn();
+    SpreadsheetApp.flush(); // commit before the lock is released
+    return result;
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function _staleResult(message) {
+  return {
+    success: false,
+    stale:   true,
+    error:   message || 'This changed since the app loaded it. The list has been refreshed — please try again.'
+  };
+}
+
+// Reads the Schedule sheet once: all values, the header→column map and where the data starts.
+function _readSchedule(sheet) {
+  const data         = sheet.getDataRange().getValues();
+  const firstRowMap  = _rosterColMap(data[0]);
+  const headerRowIdx = Object.keys(firstRowMap).length > 0 ? 0 : 1;
+  const col          = headerRowIdx === 0 ? firstRowMap : _rosterColMap(data[headerRowIdx] || []);
+  return { data: data, col: col, headerRowIdx: headerRowIdx, tzOff: _scriptTzOffsetMs(Session.getScriptTimeZone()) };
+}
+
+// Returns the 1-indexed row holding the entry with ref.date + ref.group, or 0 if there is none.
+// ref.rowIndex is tried first; if that row holds something else, the sheet is searched.
+function _findScheduleRow(sched, ref) {
+  const data = sched.data, col = sched.col;
+  const isMatch = function(i) {
+    const row = data[i];
+    if (i <= sched.headerRowIdx || !row || !row[col.date]) return false;
+    return String(row[col.group] || '') === ref.group &&
+           _fmtDateISO(new Date(row[col.date]), sched.tzOff) === ref.date;
+  };
+  if (ref.rowIndex && isMatch(ref.rowIndex - 1)) return ref.rowIndex;
+  for (let i = sched.headerRowIdx + 1; i < data.length; i++) {
+    if (isMatch(i)) return i + 1;
+  }
+  return 0;
+}
+
+// Same idea for the Members and Lyrics tabs, whose rows are identified by column A.
+// colA is the sheet's column A values from row 1 (see _readColA).
+function _findRowByColA(colA, firstDataRow, rowIndex, expected) {
+  if (expected === undefined || expected === null || expected === '') return 0;
+  const want    = String(expected);
+  const isMatch = function(r) { return r >= firstDataRow && r <= colA.length && String(colA[r - 1][0]) === want; };
+  if (rowIndex && isMatch(rowIndex)) return rowIndex;
+  for (let r = firstDataRow; r <= colA.length; r++) {
+    if (isMatch(r)) return r;
+  }
+  return 0;
+}
+
+function _readColA(sheet) {
+  return sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 1), 1).getValues();
+}
+
 // ---- Roster CRUD ----
 
-function saveRosterEntries(entries) {
-  try {
+// entries:    rows to write. An entry with a rowIndex updates that row and carries
+//             orig {date, group} — what the row held when the client loaded it. An entry
+//             without a rowIndex is appended.
+// removeRefs: optional [{rowIndex, date, group}] rows to delete in the same locked call
+//             (per-group rows left over when an event is converted to a single "Both" row).
+// Returns {success, stable}. stable:true means no row moved, so the client's rowIndices are
+// still correct. Otherwise the fresh entries come back in the same response
+// (see _entriesWriteResult) so the client does not need a second call to reload.
+function saveRosterEntries(entries, removeRefs) {
+  return _withWriteLock(function() {
     const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = ss.getSheetByName(SCHEDULE_SHEET_NAME);
-    if (!sheet) return { success: false, error: 'Roster sheet not found' };
+    if (!sheet) return { success: false, error: 'Schedule sheet not found' };
 
-    const data         = sheet.getDataRange().getValues();
-    const firstRowMap  = _rosterColMap(data[0]);
-    const headerRowIdx = Object.keys(firstRowMap).length > 0 ? 0 : 1;
-    const col          = headerRowIdx === 0 ? firstRowMap : _rosterColMap(data[headerRowIdx]);
-    const numCols      = data[headerRowIdx].length;
-    const dataStartRow = headerRowIdx + 2; // 1-indexed row where data begins (avoids re-read in sort)
+    const sched = _readSchedule(sheet);
+    const data  = sched.data;
+    const col   = sched.col;
+    if (col.date === undefined || col.group === undefined) {
+      return { success: false, error: 'Schedule sheet is missing its Date or Group header' };
+    }
+    const numCols      = data[sched.headerRowIdx].length;
+    const dataStartRow = sched.headerRowIdx + 2; // 1-indexed row where data begins
 
-    // Sort only when the row order can change: any new row or any entry with a changed date.
-    const needsSort = entries.some(function(entry) {
-      if (!entry.rowIndex) return true;
-      const newDate = _parseDate(entry.date);
-      const oldCell = data[entry.rowIndex - 1] && data[entry.rowIndex - 1][col.date];
-      if (!oldCell) return true;
-      return _dateChanged(new Date(oldCell), newDate);
+    // Resolve every target row BEFORE writing anything, so a rejected request changes nothing.
+    const plan = [];
+    let nextNewRow = data.length + 1; // data.length === getLastRow() — already in memory
+    let needsSort  = false;           // row order can change: new row, or a changed Date/Group
+    let relocated  = false;           // a row was not where the client thought it was
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(entry.date)) || SCHEDULE_GROUPS.indexOf(entry.group) < 0) {
+        return { success: false, error: 'Invalid date or group' };
+      }
+      if (entry.rowIndex) {
+        const orig = entry.orig || entry;
+        const row  = _findScheduleRow(sched, { rowIndex: entry.rowIndex, date: orig.date, group: orig.group });
+        if (!row) return _staleResult();
+        if (row !== entry.rowIndex) relocated = true;
+        if (orig.date !== entry.date || orig.group !== entry.group) needsSort = true;
+        plan.push({ entry: entry, row: row });
+      } else {
+        // (Date, Group) identifies an event row — never append a second one.
+        if (_findScheduleRow(sched, { date: entry.date, group: entry.group })) {
+          return _staleResult('That date is already scheduled. The list has been refreshed — edit the existing event instead.');
+        }
+        needsSort = true;
+        plan.push({ entry: entry, row: nextNewRow++ });
+      }
+    }
+
+    const targetRows = plan.map(function(p) { return p.row; });
+    const removeRows = [];
+    (removeRefs || []).forEach(function(ref) {
+      const row = _findScheduleRow(sched, ref);
+      if (row && targetRows.indexOf(row) < 0 && removeRows.indexOf(row) < 0) removeRows.push(row);
     });
 
-    let nextNewRow = data.length + 1; // data.length === getLastRow() — already in memory, no extra read
-    entries.forEach(function(entry) {
-      const dateObj = _parseDate(entry.date);
+    plan.forEach(function(p) {
+      const entry   = p.entry;
       const rowData = new Array(numCols).fill('');
       const s = function(key, v) { if (col[key] !== undefined) rowData[col[key]] = v; };
-      s('date',        dateObj);
+      s('date',        _parseDate(entry.date));
       s('group',       entry.group);
       s('eventType',   entry.eventType);
       s('venue',       entry.venue       || '');
@@ -327,45 +442,80 @@ function saveRosterEntries(entries) {
       s('attendees',   entry.attendees   || '');
 
       // Set time cell to plain text before writing so Sheets never auto-converts '18:30' to a Date.
-      const targetRow = entry.rowIndex || nextNewRow;
-      if (!entry.rowIndex) nextNewRow++;
-      if (col.time !== undefined) sheet.getRange(targetRow, col.time + 1).setNumberFormat('@');
-      sheet.getRange(targetRow, 1, 1, numCols).setValues([rowData]);
+      if (col.time !== undefined) sheet.getRange(p.row, col.time + 1).setNumberFormat('@');
+      sheet.getRange(p.row, 1, 1, numCols).setValues([rowData]);
     });
 
+    // Bottom-up so each delete leaves the rows above it where they were.
+    removeRows.sort(function(a, b) { return b - a; }).forEach(function(row) { sheet.deleteRow(row); });
+
     SpreadsheetApp.flush(); // commit writes before sort so getLastColumn() sees col M
-    _clearEntriesCache();
-    if (needsSort) {
-      sortRosterSheet(sheet, nextNewRow - 1, dataStartRow);
-      return { success: true };
-    }
-    return { success: true, stable: true }; // rowIndices unchanged — client can skip loadData()
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+    if (needsSort) sortRosterSheet(sheet, nextNewRow - 1 - removeRows.length, dataStartRow, col);
+
+    const stable = !(needsSort || relocated || removeRows.length);
+    return _entriesWriteResult(ss, stable);
+  });
 }
 
-function deleteRosterEntry(rowIndex) {
-  try {
-    SpreadsheetApp.openById(SPREADSHEET_ID)
-      .getSheetByName(SCHEDULE_SHEET_NAME)
-      .deleteRow(rowIndex);
-    _clearEntriesCache();
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+// refs: [{rowIndex, date, group}]. All rows are deleted in ONE locked call, bottom-up —
+// separate calls run concurrently, and whichever ran second would hit a shifted row.
+function deleteRosterEntries(refs) {
+  return _withWriteLock(function() {
+    const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(SCHEDULE_SHEET_NAME);
+    if (!sheet) return { success: false, error: 'Schedule sheet not found' };
+    const sched = _readSchedule(sheet);
+    if (sched.col.date === undefined || sched.col.group === undefined) {
+      return { success: false, error: 'Schedule sheet is missing its Date or Group header' };
+    }
+
+    const rows = [];
+    (refs || []).forEach(function(ref) {
+      const row = _findScheduleRow(sched, ref);
+      if (row && rows.indexOf(row) < 0) rows.push(row);
+    });
+    if (rows.length === 0) return _staleResult();
+
+    rows.sort(function(a, b) { return b - a; }).forEach(function(row) { sheet.deleteRow(row); });
+    SpreadsheetApp.flush();
+    return _entriesWriteResult(ss, false);
+  });
+}
+
+// Ends a Schedule write: re-reads the sheet once, refills the cache with it (so the next
+// person to open the app does not wait for a sheet read), and — when rows moved — returns
+// the fresh entries so the client can apply them without a second round trip.
+// If the re-read fails the write has still succeeded: drop the cache and let the client reload.
+function _entriesWriteResult(ss, stable) {
+  let fresh = null;
+  try { fresh = _refreshEntriesCache(ss); } catch (e) { _clearEntriesCache(); }
+  if (stable || !fresh) return { success: true, stable: stable };
+  return { success: true, stable: false, entries: fresh.list, hasMorePast: fresh.hasMorePast, hasMoreFuture: fresh.hasMoreFuture };
 }
 
 // ---- Members CRUD ----
 
-function saveMember(member) {
-  try {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(MEMBERS_SHEET_NAME);
-    if (!sheet) return { success: false, error: 'Members sheet not found' };
+// Members tab: row 1 is the notice row and row 2 the headers, unless row 1 is the header row.
+function _membersFirstDataRow(colA) {
+  return _normalizeStr(colA[0][0]) === 'name' ? 2 : 3;
+}
 
-    const updatedAt = new Date();
+// member.origName: for an edit, the name the row held when the client loaded it.
+function saveMember(member) {
+  return _withWriteLock(function() {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(MEMBERS_SHEET_NAME);
+    if (!sheet) return { success: false, error: 'Members sheet not found' };
+    if (!String(member.name || '').trim()) return { success: false, error: 'Name is required' };
+
+    let targetRow;
+    if (member.rowIndex) {
+      const colA = _readColA(sheet);
+      targetRow = _findRowByColA(colA, _membersFirstDataRow(colA), member.rowIndex, member.origName);
+      if (!targetRow) return _staleResult();
+    } else {
+      targetRow = sheet.getLastRow() + 1;
+    }
+
     const rowData = [
       member.name,
       member.group,
@@ -376,32 +526,30 @@ function saveMember(member) {
       member.active        !== false,
       member.roleType      || 'Adult',
       member.canDrive      === true,
-      updatedAt,
+      new Date(),
       member.birthday      || ''
     ];
 
-    const targetRow = member.rowIndex || (sheet.getLastRow() + 1);
     // Set birthday cell to plain text before writing so Sheets doesn't auto-convert the date string.
     if (member.birthday) sheet.getRange(targetRow, 11).setNumberFormat('@');
     sheet.getRange(targetRow, 1, 1, 11).setValues([rowData]);
 
     _clearMembersCache();
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+    return { success: true, rowIndex: targetRow };
+  });
 }
 
-function deleteMember(rowIndex) {
-  try {
-    SpreadsheetApp.openById(SPREADSHEET_ID)
-      .getSheetByName(MEMBERS_SHEET_NAME)
-      .deleteRow(rowIndex);
+function deleteMember(rowIndex, name) {
+  return _withWriteLock(function() {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(MEMBERS_SHEET_NAME);
+    if (!sheet) return { success: false, error: 'Members sheet not found' };
+    const colA = _readColA(sheet);
+    const row  = _findRowByColA(colA, _membersFirstDataRow(colA), rowIndex, name);
+    if (!row) return _staleResult();
+    sheet.deleteRow(row);
     _clearMembersCache();
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+    return { success: true, rowIndex: row }; // the row actually deleted — rows below moved up one
+  });
 }
 
 // ---- Lyrics CRUD ----
@@ -428,54 +576,112 @@ function getLyrics(ss) {
   return lyrics;
 }
 
+// lyric.origName: for an edit, the song name the row held when the client loaded it.
 function saveLyric(lyric) {
-  try {
-    const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(LYRICS_SHEET_NAME);
+  return _withWriteLock(function() {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(LYRICS_SHEET_NAME);
     if (!sheet) return { success: false, error: 'Lyrics sheet not found' };
+    if (!String(lyric.songName || '').trim()) return { success: false, error: 'Song name is required' };
 
     const rowData = [lyric.songName, lyric.copyCount || 0, new Date()];
-
+    let targetRow;
     if (lyric.rowIndex) {
-      sheet.getRange(lyric.rowIndex, 1, 1, 3).setValues([rowData]);
-      _clearLyricsCache();
-      return { success: true, rowIndex: lyric.rowIndex };
+      targetRow = _findRowByColA(_readColA(sheet), 2, lyric.rowIndex, lyric.origName);
+      if (!targetRow) return _staleResult();
+      sheet.getRange(targetRow, 1, 1, 3).setValues([rowData]);
     } else {
       sheet.appendRow(rowData);
-      _clearLyricsCache();
-      return { success: true, rowIndex: sheet.getLastRow() };
+      targetRow = sheet.getLastRow();
     }
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+    _clearLyricsCache();
+    return { success: true, rowIndex: targetRow };
+  });
 }
 
-function deleteLyric(rowIndex) {
-  try {
-    SpreadsheetApp.openById(SPREADSHEET_ID)
-      .getSheetByName(LYRICS_SHEET_NAME)
-      .deleteRow(rowIndex);
+function deleteLyric(rowIndex, songName) {
+  return _withWriteLock(function() {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(LYRICS_SHEET_NAME);
+    if (!sheet) return { success: false, error: 'Lyrics sheet not found' };
+    const row = _findRowByColA(_readColA(sheet), 2, rowIndex, songName);
+    if (!row) return _staleResult();
+    sheet.deleteRow(row);
     _clearLyricsCache();
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  }
+    return { success: true, rowIndex: row }; // the row actually deleted — rows below moved up one
+  });
 }
 
 // ---- Helpers ----
 
-function _clearDataCache() {
-  try { CacheService.getScriptCache().removeAll(['allData_entries', 'allData_members', 'allData_lyrics']); } catch(e) {}
+// ---- Cache (chunked) ----
+// A value is stored as chunks  <key>_0 … <key>_n-1, each "<stamp>|<n>|<part>". The stamp is
+// the same for every chunk of one put, so chunks from two different puts are never combined.
+
+function _cachePut(key, value) {
+  try {
+    const json = JSON.stringify(value);
+    const n    = Math.max(1, Math.ceil(json.length / CACHE_CHUNK_CHARS));
+    if (n > CACHE_MAX_CHUNKS) {
+      Logger.log('Cache skipped for ' + key + ': ' + json.length + ' chars is over the chunk limit');
+      CacheService.getScriptCache().remove(key + '_0');
+      return;
+    }
+    const stamp = String(Date.now()) + Math.floor(Math.random() * 1e6);
+    const parts = {};
+    for (let i = 0; i < n; i++) {
+      parts[key + '_' + i] = stamp + '|' + n + '|' + json.substr(i * CACHE_CHUNK_CHARS, CACHE_CHUNK_CHARS);
+    }
+    CacheService.getScriptCache().putAll(parts, CACHE_TTL);
+  } catch (e) {
+    Logger.log('Cache put failed for ' + key + ': ' + e);
+  }
 }
-function _clearEntriesCache() {
-  try { CacheService.getScriptCache().remove('allData_entries'); } catch(e) {}
+
+// Reads several values in ONE cache call. Returns {key: value}; a missing, incomplete or
+// unreadable value is simply absent, and the caller falls back to reading the sheet.
+function _cacheGetMany(keys) {
+  const out = {};
+  try {
+    const all = [];
+    keys.forEach(function(key) {
+      for (let i = 0; i < CACHE_MAX_CHUNKS; i++) all.push(key + '_' + i);
+    });
+    const got = CacheService.getScriptCache().getAll(all);
+    keys.forEach(function(key) {
+      try {
+        const first = got[key + '_0'];
+        if (!first) return;
+        const head  = first.split('|', 2); // [stamp, n]
+        const n     = parseInt(head[1], 10);
+        const prefix = head[0] + '|' + head[1] + '|';
+        let json = '';
+        for (let i = 0; i < n; i++) {
+          const chunk = got[key + '_' + i];
+          if (!chunk || chunk.indexOf(prefix) !== 0) return;
+          json += chunk.substr(prefix.length);
+        }
+        out[key] = JSON.parse(json);
+      } catch (e) {}
+    });
+  } catch (e) {}
+  return out;
 }
-function _clearMembersCache() {
-  try { CacheService.getScriptCache().remove('allData_members'); } catch(e) {}
+
+// Removing chunk 0 is enough: a value without it reads as missing.
+function _cacheRemove(keys) {
+  try { CacheService.getScriptCache().removeAll(keys.map(function(k) { return k + '_0'; })); } catch (e) {}
 }
-function _clearLyricsCache() {
-  try { CacheService.getScriptCache().remove('allData_lyrics'); } catch(e) {}
+
+// Re-reads the Schedule sheet into the cache and returns {list, hasMorePast, hasMoreFuture}.
+function _refreshEntriesCache(ss) {
+  const r = getRosterEntries(ss);
+  const entriesData = { list: r.list, hasMorePast: r.hasMorePast, hasMoreFuture: r.hasMoreFuture };
+  _cachePut(CACHE_KEYS.entries, entriesData);
+  return entriesData;
 }
+
+function _clearEntriesCache() { _cacheRemove([CACHE_KEYS.entries]); }
+function _clearMembersCache() { _cacheRemove([CACHE_KEYS.members]); }
+function _clearLyricsCache()  { _cacheRemove([CACHE_KEYS.lyrics]); }
 
 function _applyNoticeStyle(range) {
   return range.setBackground('#fef08a').setFontColor('#713f12').setFontWeight('bold')
@@ -486,27 +692,21 @@ function _createDropdown(values) {
   return SpreadsheetApp.newDataValidation().requireValueInList(values, true).setAllowInvalid(false).build();
 }
 
-function _dateChanged(oldDate, newDate) {
-  return oldDate.getFullYear() !== newDate.getFullYear() ||
-         oldDate.getMonth()    !== newDate.getMonth()    ||
-         oldDate.getDate()     !== newDate.getDate();
-}
-
 // Parses a 'YYYY-MM-DD' string into a local Date without timezone shift.
 function _parseDate(dateStr) {
   const p = dateStr.split('-');
   return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
 }
 
-function sortRosterSheet(sheet, lastRow, dataStartRow) {
-  // lastRow and dataStartRow may be passed from saveRosterEntries to avoid extra reads.
-  // When called standalone (e.g. from the editor), they default to sheet reads.
+function sortRosterSheet(sheet, lastRow, dataStartRow, col) {
+  // lastRow, dataStartRow and col (the _rosterColMap result) are passed from saveRosterEntries
+  // to avoid extra reads; without them this falls back to sheet reads and columns A/B.
   const _lastRow      = lastRow      || sheet.getLastRow();
   const _dataStartRow = dataStartRow || (_normalizeStr(sheet.getRange(1, 1).getValue()) === 'date' ? 2 : 3);
   if (_lastRow < _dataStartRow) return;
   sheet.getRange(_dataStartRow, 1, _lastRow - _dataStartRow + 1, sheet.getLastColumn()).sort([
-    { column: 1, ascending: true },
-    { column: 2, ascending: true }
+    { column: col ? col.date  + 1 : 1, ascending: true },
+    { column: col ? col.group + 1 : 2, ascending: true }
   ]);
 }
 

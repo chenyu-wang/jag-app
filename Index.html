@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <!-- Version: 1.47.0 (2026-05-31) -->
+  <!-- Version: 1.49.0 (2026-11-16) -->
   <title>JAG App</title>
   <meta name="theme-color" content="#6366f1" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -166,7 +166,7 @@
     .dd-opt:hover, .dd-opt.active { background: #6366f1; color: #fff; }
 
     /* ---- Toast ---- */
-    #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1e293b; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: .85rem; opacity: 0; transition: all .25s; pointer-events: none; white-space: nowrap; z-index: 200; }
+    #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1e293b; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: .85rem; opacity: 0; transition: all .25s; pointer-events: none; width: max-content; max-width: 90vw; text-align: center; z-index: 200; }
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
     /* ---- Modal ---- */
@@ -299,11 +299,14 @@ let editingLyric   = null;
 let dashPast   = 4;   // how many past weeks shown in dashboard
 let dashFuture = 4;   // how many future weeks shown in dashboard
 let _dashBusy  = false;
+let _homeMorePast   = false; // set by renderHome: earlier loaded dates exist above the rendered window
+let _homeMoreFuture = false; // set by renderHome: later loaded dates exist below the rendered window
 let _scheduleDatesCache  = null;  // D: invalidated whenever allEntries changes
 let _entriesByDateCache  = null;  // invalidated whenever allEntries changes
 let _dupFirstNamesCache  = null;  // F: invalidated whenever allMembers changes
 let _activeCache         = null;  // invalidated whenever allMembers changes
 let _loadGen = 0;               // incremented on each loadData() call; stale responses are discarded
+let _fullLoadInFlight = false;  // a loadData() that will replace allEntries has not answered yet
 let attendanceCache = {};        // keyed by 'YYYY-MM-DD' (combined) or 'YYYY-MM-DD:GROUP' (separated); value: Set<memberName>
 let _modalHistoryPushed = false; // true while a modal is open and a history entry was pushed for Android back
 let _hasMorePast        = false; // true when the sheet has entries before the loaded window
@@ -321,16 +324,7 @@ function _esc(s) {
 // =============================================
 document.addEventListener('DOMContentLoaded', function() {
   if (_INITIAL_DATA) {
-    allEntries      = _INITIAL_DATA.entries || [];
-    allMembers      = _INITIAL_DATA.members || [];
-    allLyrics       = _INITIAL_DATA.lyrics  || [];
-    _hasMorePast    = !!_INITIAL_DATA.hasMorePast;
-    _hasMoreFuture  = !!_INITIAL_DATA.hasMoreFuture;
-    _scheduleDatesCache = null;
-    _entriesByDateCache = null;
-    _dupFirstNamesCache = null;
-    _activeCache = null;
-    _applyAttendanceFromEntries(allEntries);
+    _applyServerEntries(_INITIAL_DATA);
     const loadingEl = document.getElementById('loading-msg');
     if (loadingEl) loadingEl.remove();
     if (_INITIAL_DATA.version) {
@@ -339,8 +333,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     renderView();
     // SSR ships entries only — pull Members + Lyrics in the background, off the
-    // critical path. Home already rendered; this re-renders once they arrive.
-    if (!_INITIAL_DATA.members) loadData();
+    // critical path (skipEntries: the Schedule is already here, don't download it again).
+    // Home already rendered; this re-renders it in place once they arrive.
+    loadData(false, true);
   } else {
     loadData(); // fallback: SSR data unavailable, fetch async
   }
@@ -348,14 +343,16 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('content').addEventListener('scroll', function() {
     if (currentView !== 'home' || _dashBusy) return;
     const el = this;
-    if (el.scrollTop < 80) {
+    // Only grow the window when there is something more to show. Without these checks the whole
+    // list was rebuilt on every scroll frame for as long as the user stayed near either end.
+    if (el.scrollTop < 80 && _homeMorePast) {
       _dashBusy = true;
       const oldH = el.scrollHeight;
       dashPast += 4;
       renderHome(false);
       el.scrollTop += el.scrollHeight - oldH; // sync: correct position before browser paints, no flash
       requestAnimationFrame(function() { _dashBusy = false; });
-    } else if (el.scrollTop + el.clientHeight > el.scrollHeight - 80) {
+    } else if (el.scrollTop + el.clientHeight > el.scrollHeight - 80 && _homeMoreFuture) {
       _dashBusy = true;
       dashFuture += 4;
       renderHome(false);
@@ -371,34 +368,49 @@ window.addEventListener('popstate', function(e) {
   }
 });
 
-function loadData() {
-  // A: version is now included in the getAllData() response — no separate getVersion() call needed
+// Replaces the Schedule entries with a fresh set from the server
+// (doGet's initial data, a getAllData() response, or the result of a save/delete).
+function _applyServerEntries(data) {
+  allEntries     = data.entries || [];
+  _hasMorePast   = !!data.hasMorePast;
+  _hasMoreFuture = !!data.hasMoreFuture;
+  _scheduleDatesCache = null;  // D: invalidate on fresh data
+  _entriesByDateCache = null;
+  _applyAttendanceFromEntries(allEntries);
+}
+
+// force=true bypasses the server-side cache and re-reads the sheets.
+// skipEntries=true fetches Members + Lyrics only and leaves allEntries as it is.
+function loadData(force, skipEntries) {
   // Increment generation so any in-flight response from a previous loadData() call is discarded.
   const gen = ++_loadGen;
+  _fullLoadInFlight = !skipEntries;
   google.script.run
     .withSuccessHandler(function(data) {
       if (gen !== _loadGen) return;  // stale response — a newer loadData() already fired
-      allEntries     = data.entries || [];
+      _fullLoadInFlight = false;
+      if (data.entries) _applyServerEntries(data);
       allMembers     = data.members || [];
       allLyrics      = data.lyrics  || [];
-      _hasMorePast   = !!data.hasMorePast;
-      _hasMoreFuture = !!data.hasMoreFuture;
-      _scheduleDatesCache = null;  // D: invalidate on fresh data
-      _entriesByDateCache = null;
       _dupFirstNamesCache = null;  // F: invalidate on fresh data
       _activeCache = null;
-      _applyAttendanceFromEntries(allEntries);
       const loadingEl = document.getElementById('loading-msg');
       if (loadingEl) loadingEl.remove();
       if (data.version) {
         const el = document.getElementById('header-sub');
         if (el) el.textContent = 'v' + data.version;
       }
-      renderView();
+      // If the Schedule is already on screen this is a refresh of what the user is looking at:
+      // redraw it in place instead of jumping back to the "Next LG" card.
+      renderView(currentView === 'home' && !!document.getElementById('upcoming-card'));
     })
     .withFailureHandler(function(err) {
       if (gen !== _loadGen) return;
+      _fullLoadInFlight = false;
+      const btn = document.getElementById('refresh-btn');
+      if (btn) btn.classList.remove('spinning');
       const loadingEl = document.getElementById('loading-msg');
+      if (!loadingEl) showToast('Could not load the latest data — check your connection', 4000);
       if (loadingEl) {
         loadingEl.innerHTML = '<div style="color:#991b1b;font-weight:700;margin-bottom:8px;">Failed to load roster</div>'
           + '<div style="color:#7f1d1d;font-size:.8rem;margin-bottom:12px;">' + _esc(err.message || String(err)) + '</div>'
@@ -407,7 +419,7 @@ function loadData() {
       }
       console.error('getAllData failed:', err);
     })
-    .getAllData();
+    .getAllData(!!force, !!skipEntries);
 }
 
 function today() {
@@ -433,17 +445,44 @@ function _updateFab() {
 }
 
 function fabAction() {
-  if      (currentView === 'home')    openAddForDate(toISODate(getNextFriday()));
+  if      (currentView === 'home')    openAddForDate(toISODate(_nextOpenFriday()));
   else if (currentView === 'members') openMemberForm(null);
   else if (currentView === 'lyrics')  openLyricForm(null);
 }
 
-function _mergeEntriesIntoCache(savedEntries) {
+// What the server needs to find (and verify) a schedule row: see "Write safety" in Code.gs.
+function _entryRef(e) {
+  return { rowIndex: e.rowIndex, date: e.date, group: e.group };
+}
+
+// Shows a failure the server reported. stale:true means the sheet no longer matches what this
+// page loaded (someone else changed it), so close the form and reload straight from the sheet.
+function _showServerError(result) {
+  const msg = (result && result.error) || 'Something went wrong';
+  if (result && result.stale) {
+    showToast(msg, 5000);
+    closeModal();
+    loadData(true);
+  } else {
+    showToast('Error: ' + msg);
+  }
+}
+
+// Applies a successful save to allEntries. A saved entry replaces the cached entry for the row
+// it was written to (which may have had a different Group before, e.g. JAG1 → Both);
+// removedRefs are rows the server deleted in the same call.
+function _mergeEntriesIntoCache(savedEntries, removedRefs) {
   savedEntries.forEach(function(saved) {
-    const idx = allEntries.findIndex(function(e) { return e.date === saved.date && e.group === saved.group; });
-    if (idx >= 0) allEntries[idx] = Object.assign({}, allEntries[idx], saved);
+    const idx = allEntries.findIndex(function(e) {
+      return (saved.rowIndex && e.rowIndex === saved.rowIndex) || (e.date === saved.date && e.group === saved.group);
+    });
+    if (idx >= 0) allEntries[idx] = saved;
     else allEntries.push(saved);
   });
+  if (removedRefs && removedRefs.length) {
+    const gone = new Set(removedRefs.map(function(r) { return r.rowIndex; }));
+    allEntries = allEntries.filter(function(e) { return !gone.has(e.rowIndex); });
+  }
   _applyAttendanceFromEntries(savedEntries);
   _scheduleDatesCache = null;
   _entriesByDateCache = null;
@@ -457,7 +496,10 @@ function finishSave(msg, skipRefresh) {
   setActiveNav('home');
   _updateFab();
   renderHome();
-  if (!skipRefresh) loadData(); // skip when server confirmed rowIndices are stable
+  // Skipped when allEntries is already right (rows did not move, or the server sent the fresh
+  // entries back with the save). A full load still in flight would overwrite that with older
+  // data when it lands, so replace it with a new one.
+  if (!skipRefresh || _fullLoadInFlight) loadData();
 }
 
 function encodeEntries(obj) {
@@ -468,7 +510,7 @@ function buildCardFooter(friday, entries, ts, editLabel, shareLabel) {
   const enc = encodeEntries(entries);
   const footer = document.createElement('div');
   footer.className = 'card-footer';
-  footer.innerHTML = `<span class="card-ts">${ts ? 'Updated ' + formatUpdatedAt(ts) : ''}</span><button class="share-btn" onclick="shareEvent(new Date('${toISODate(friday)}'), ${enc})">📤 ${shareLabel || 'Share'}</button><button class="edit-btn" onclick="openEditEntries(${enc})">✏️ ${editLabel || 'Edit'}</button>`;
+  footer.innerHTML = `<span class="card-ts">${ts ? 'Updated ' + formatUpdatedAt(ts) : ''}</span><button class="share-btn" onclick="shareEvent(parseISODate('${toISODate(friday)}'), ${enc})">📤 ${shareLabel || 'Share'}</button><button class="edit-btn" onclick="openEditEntries(${enc})">✏️ ${editLabel || 'Edit'}</button>`;
   return footer;
 }
 
@@ -494,14 +536,15 @@ function showView(view) {
 function refreshData() {
   const btn = document.getElementById('refresh-btn');
   if (btn) btn.classList.add('spinning');
-  loadData();
+  loadData(true);
 }
 
-function renderView() {
+// keepScroll: redraw the Schedule where it is (same window, same scroll position).
+function renderView(keepScroll) {
   const btn = document.getElementById('refresh-btn');
   if (btn) btn.classList.remove('spinning');
   _updateFab();
-  if      (currentView === 'home')    renderHome();
+  if      (currentView === 'home')    renderHome(keepScroll ? false : undefined);
   else if (currentView === 'members') renderMembers();
   else if (currentView === 'lyrics')  renderLyrics();
 }
@@ -577,6 +620,8 @@ function renderHome(resetWindow) {
     if (fridays[i] >= twoMonthsLater) break;
     if (entriesByDate.get(toISODate(fridays[i]))) endIdx = i;
   }
+  _homeMorePast   = startIdx > 0;
+  _homeMoreFuture = endIdx < fridays.length - 1;
 
   if (startIdx === 0) {
     if (_hasMorePast) {
@@ -788,7 +833,7 @@ function buildEventCard(friday, entries, isPast, isUpcoming) {
       // Youth Hour / Combined: attendance modal + share
       const _combFooter = document.createElement('div');
       _combFooter.className = 'card-footer';
-      _combFooter.innerHTML = `<span class="card-ts">${ts ? 'Updated ' + formatUpdatedAt(ts) : ''}</span><button class="share-btn" onclick="shareCombinedWithNames(new Date('${toISODate(friday)}'), ${_combEnc})">📤 Share</button><button class="edit-btn" onclick="openEditEntries(${_combEnc})">✏️ Edit</button>`;
+      _combFooter.innerHTML = `<span class="card-ts">${ts ? 'Updated ' + formatUpdatedAt(ts) : ''}</span><button class="share-btn" onclick="shareCombinedWithNames(parseISODate('${toISODate(friday)}'), ${_combEnc})">📤 Share</button><button class="edit-btn" onclick="openEditEntries(${_combEnc})">✏️ Edit</button>`;
       card.appendChild(_combFooter);
     }
 
@@ -808,7 +853,7 @@ function buildEventCard(friday, entries, isPast, isUpcoming) {
             ${entry.organiser ? `<span style="font-size:.8rem;color:#64748b;">🎙️ <b style="color:#1e293b;font-weight:600;">${_esc(displayName(entry.organiser))}</b></span>` : ''}
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="share-btn" onclick="shareGroupWithNames(new Date('${toISODate(friday)}'), ${encOne})">📤 Share</button>
+            <button class="share-btn" onclick="shareGroupWithNames(parseISODate('${toISODate(friday)}'), ${encOne})">📤 Share</button>
             <button class="edit-btn" onclick="openEditEntries(${encOne})">✏️ Edit ${_esc(entry.group)}</button>
           </div>
         </div>
@@ -859,16 +904,16 @@ function renderAdd(prefillDate) {
   const _legacyTypeMap = { 'JAG1&2 Combined': 'Combined', 'TBD': 'Special' };
   const defaultType = isEdit
     ? (_legacyTypeMap[refEntry.eventType] || refEntry.eventType)
-    : suggestEventType(new Date(defaultDate));
+    : suggestEventType(parseISODate(defaultDate));
   const defaultTime = isEdit ? (refEntry.time || '18:30') : '18:30';
   const titleText   = isEdit ? 'Edit Event' : 'Schedule Event';
 
   let deleteBtn = '';
-  if (isCombinedEdit) {
-    const idxList = editingEntries.map(e => e.rowIndex).join(',');
-    deleteBtn = `<button class="btn btn-danger" onclick="confirmDeleteEntries([${idxList}], '${refEntry.date}', 'combined event')">Delete This Event</button>`;
-  } else if (isEdit) {
-    deleteBtn = `<button class="btn btn-danger" onclick="confirmDeleteEntries([${refEntry.rowIndex}], '${refEntry.date}', ${encodeEntries(refEntry.group)})">Delete This Entry</button>`;
+  if (isEdit) {
+    const refs = encodeEntries(editingEntries.map(_entryRef));
+    deleteBtn = isCombinedEdit
+      ? `<button class="btn btn-danger" onclick="confirmDeleteEntries(${refs}, 'combined event')">Delete This Event</button>`
+      : `<button class="btn btn-danger" onclick="confirmDeleteEntries(${refs}, ${encodeEntries(refEntry.group)})">Delete This Entry</button>`;
   }
 
   const wrap = document.createElement('div');
@@ -927,6 +972,20 @@ function renderAdd(prefillDate) {
 
 let activeGroups = ['JAG1', 'JAG2'];
 
+// Groups the Separated LG form is for. Editing per-group rows → exactly those rows.
+// Otherwise (a new event, or a "Both" event being converted to Separated LG) → the toggles.
+function _formGroups() {
+  const own = editingEntries.map(e => e.group).filter(g => g === 'JAG1' || g === 'JAG2').sort();
+  return own.length ? own : activeGroups;
+}
+
+// The FAB's default date: the first upcoming Friday with nothing scheduled yet.
+function _nextOpenFriday() {
+  const d = getNextFriday();
+  for (let i = 0; i < 52 && allEntries.some(e => e.date === toISODate(d)); i++) d.setDate(d.getDate() + 7);
+  return d;
+}
+
 function toggleGroup(grp) {
   const btn = document.getElementById('grp-' + grp.toLowerCase());
   if (activeGroups.includes(grp) && activeGroups.length > 1) {
@@ -940,7 +999,8 @@ function toggleGroup(grp) {
 }
 
 function onDateChange(val) {
-  const suggested = suggestEventType(new Date(val));
+  if (!val) return;
+  const suggested = suggestEventType(parseISODate(val));
   document.getElementById('f-type').value = suggested;
   rebuildSections(suggested);
 }
@@ -964,9 +1024,11 @@ function rebuildSections(eventType) {
   const combined = isCombinedType(eventType);
   const isCR     = eventType === 'Cancelled' || eventType === 'Replaced';
 
-  // Group selector: only relevant for new Separated LG events
+  // Group selector: for Separated LG when no per-group rows exist yet
+  // (a new event, or a "Both" event being converted to Separated LG)
+  const hasGroupRows = editingEntries.some(e => e.group === 'JAG1' || e.group === 'JAG2');
   const gs = document.getElementById('group-selector');
-  if (gs) gs.style.display = (combined || isCR || isEdit) ? 'none' : '';
+  if (gs) gs.style.display = (combined || isCR || hasGroupRows) ? 'none' : '';
 
   // Cancelled / Replaced: only a notes field — saves as single "Both" entry
   if (isCR) {
@@ -1067,7 +1129,7 @@ function rebuildSections(eventType) {
 
   // Separated LG: per-group sections
   // Field order: Venue → Organiser|Food → P&W|Facilitator → Reporting → Notes
-  const groups = isEdit ? editingEntries.map(e => e.group) : activeGroups;
+  const groups = _formGroups();
   groups.forEach((grp, idx) => {
     const entry      = editingEntries.find(e => e.group === grp) || {};
     const titleClass = grp === 'JAG1' ? 'jag1' : 'jag2';
@@ -1174,137 +1236,126 @@ function ddPick(inputId, listId, value) {
 function submitForm() {
   const date      = document.getElementById('f-date').value;
   const eventType = document.getElementById('f-type').value;
-  const combined  = isCombinedType(eventType);
   if (!date) { showToast('Please select a date'); return; }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { showToast('Invalid date — use YYYY-MM-DD format'); return; }
-  const _timeVal = val('f-time');
-  if (_timeVal && !/^\d{2}:\d{2}$/.test(_timeVal)) { showToast('Invalid time — use HH:MM format'); return; }
-  saveAttendanceFromForm(date, eventType);
-  _setFormSaving(true);
+  const time = val('f-time') || '';
+  if (time && !/^\d{2}:\d{2}$/.test(time)) { showToast('Invalid time — use HH:MM format'); return; }
 
-  // For all non-Separated-LG events, a single "Both" entry is saved.
-  // The existing entry is found by looking for "Both" first (new format),
-  // then falling back to JAG1 (legacy format) to support pre-migration edits.
-  const existingBoth = editingEntries.find(e => e.group === 'Both');
-  const existingJag1 = editingEntries.find(e => e.group === 'JAG1');
-  const existingJag2 = editingEntries.find(e => e.group === 'JAG2');
-  const existing     = existingBoth || existingJag1 || editingEntries[0] || {};
-  // When editing a legacy JAG1+JAG2 pair, the JAG2 row becomes an orphan after we
-  // save a single "Both" entry — delete it silently in the background.
-  const orphanRowIndex = !existingBoth && existingJag2 ? existingJag2.rowIndex : null;
-
-  // Path 1: Cancelled / Replaced — single "Both" entry, notes only
-  if (eventType === 'Cancelled' || eventType === 'Replaced') {
-    const toSave = [{
-      rowIndex: existing.rowIndex || null,
-      date, group: 'Both', eventType,
-      venue: '', organiser: '', pw: '', facilitator: '', food: '', reporting: '',
-      notes: val('shared-notes'), iceBreaker: '', attendees: '',
-      time:  val('f-time') || '',
-      updatedAt: new Date().toISOString()
-    }];
-    google.script.run
-      .withSuccessHandler(r => {
-        if (!r.success) { showToast('Error: '+r.error); return; }
-        if (orphanRowIndex) google.script.run.deleteRosterEntry(orphanRowIndex);
-        _mergeEntriesIntoCache(toSave); finishSave('Saved!', r.stable);
-      })
-      .withFailureHandler(function(e) { _setFormSaving(false); showToast('Error: ' + e.message); })
-      .saveRosterEntries(toSave);
-    return;
-  }
-
-  // Path 2: Special — single "Both" entry, venue + custom fields in notes
-  if (eventType === 'Special') {
-    const customFieldLines = Array.from(document.querySelectorAll('.special-field-row')).map(row => {
-      const label = row.querySelector('.sf-label').value.trim();
-      const value = row.querySelector('.sf-value').value.trim();
-      return (label && value) ? label + ': ' + value : null;
-    }).filter(Boolean);
-    const commentText = val('special-comment').trim();
-    if (commentText) customFieldLines.push('Comments: ' + commentText);
-    const toSave = [{
-      rowIndex: existing.rowIndex || null,
-      date, group: 'Both', eventType,
-      venue: val('shared-venue'), organiser: '', pw: '', facilitator: '', food: '', reporting: '',
-      notes: customFieldLines.join('\n'), iceBreaker: '', attendees: '',
-      time:  val('f-time') || '',
-      updatedAt: new Date().toISOString()
-    }];
-    google.script.run
-      .withSuccessHandler(r => {
-        if (!r.success) { showToast('Error: '+r.error); return; }
-        if (orphanRowIndex) google.script.run.deleteRosterEntry(orphanRowIndex);
-        _mergeEntriesIntoCache(toSave); finishSave('Saved!', r.stable);
-      })
-      .withFailureHandler(function(e) { _setFormSaving(false); showToast('Error: ' + e.message); })
-      .saveRosterEntries(toSave);
-    return;
-  }
-
-  // Path 3: Combined (Youth Hour, Combined) — single "Both" entry, all shared fields
-  if (combined) {
-    const toSave = [{
-      rowIndex:    existing.rowIndex || null,
-      date, group: 'Both', eventType,
-      venue:       val('shared-venue'),
-      organiser:   resolveDisplayName(val('shared-organiser')),
-      pw:          resolveDisplayName(val('shared-pw')),
-      facilitator: resolveDisplayName(val('shared-facilitator')),
-      food:        val('shared-food'),
-      reporting:   resolveDisplayName(val('shared-reporting')),
-      notes:       val('shared-notes'),
-      iceBreaker:  resolveDisplayName(val('shared-iceBreaker')),
-      time:        val('f-time') || '',
-      updatedAt:   new Date().toISOString(),
-      attendees:   attendanceCache[date] ? Array.from(attendanceCache[date]).join(',') : ''
-    }];
-    google.script.run
-      .withSuccessHandler(function(result) {
-        if (!result.success) { showToast('Error: ' + result.error); return; }
-        if (orphanRowIndex) google.script.run.deleteRosterEntry(orphanRowIndex);
-        _mergeEntriesIntoCache(toSave);
-        const _friday = new Date(date + 'T00:00:00');
-        const _txt = _buildCombinedShareText(_friday, toSave);
-        _copyTextSilent(_txt);
-        finishSave('Saved & copied!', result.stable);
-      })
-      .withFailureHandler(function(err) { _setFormSaving(false); showToast('Error: ' + err.message); })
-      .saveRosterEntries(toSave);
-    return;
-  }
-
-  // Path 4: Separated LG — per-group entries (JAG1 / JAG2)
   const isEdit = editingEntries.length > 0;
-  const groups = isEdit ? editingEntries.map(e => e.group) : activeGroups;
-  const toSave = groups.map(grp => {
-    const ex = editingEntries.find(e => e.group === grp) || {};
-    return {
-      rowIndex:    ex.rowIndex || null,
-      date, group: grp, eventType,
-      venue:       val(grp + '-venue'),
-      organiser:   resolveDisplayName(val(grp + '-organiser')),
-      pw:          resolveDisplayName(val(grp + '-pw')),
-      facilitator: resolveDisplayName(val(grp + '-facilitator')),
-      food:        val(grp + '-food'),
-      reporting:   resolveDisplayName(val(grp + '-reporting')),
-      notes:       val(grp + '-notes'),
-      iceBreaker:  '',
-      time:        val('f-time') || '',
-      updatedAt:   new Date().toISOString(),
-      attendees:   attendanceCache[date + ':' + grp] ? Array.from(attendanceCache[date + ':' + grp]).join(',') : ''
-    };
-  });
+  const isCR   = eventType === 'Cancelled' || eventType === 'Replaced';
+  // Every event type except Separated LG is ONE row with Group="Both".
+  const single = isCR || isCombinedType(eventType);
+  const groups = single ? ['Both'] : _formGroups();
+
+  // A new event must not land on a date that already holds one. The only allowed overlap is
+  // adding the other group to a Separated LG (e.g. JAG2 where only JAG1 is scheduled).
+  if (!isEdit) {
+    const clash = allEntries.some(e => e.date === date &&
+      (e.group === 'Both' || groups.some(g => g === 'Both' || g === e.group)));
+    if (clash) { showToast('That date already has an event — edit it instead', 4000); return; }
+  }
+
+  saveAttendanceFromForm(date, eventType);
+  const friday = parseISODate(date);
+  const now    = new Date().toISOString();
+  const attendeesFor = function(key) {
+    return attendanceCache[key] ? Array.from(attendanceCache[key]).join(',') : '';
+  };
+  // One row to save. `ex` is the existing row it overwrites, if any: its original Date + Group
+  // go to the server as `orig` so the server can confirm it is writing to the right row.
+  const row = function(ex, group, fields) {
+    return Object.assign({
+      rowIndex: (ex && ex.rowIndex) || null,
+      orig:     (ex && ex.rowIndex) ? { date: ex.date, group: ex.group } : null,
+      date: date, group: group, eventType: eventType,
+      venue: '', organiser: '', pw: '', facilitator: '', food: '', reporting: '',
+      notes: '', iceBreaker: '', attendees: '', time: time, updatedAt: now
+    }, fields);
+  };
+
+  let toSave, removeRefs = [], buildShare = null;
+
+  if (single) {
+    // Reuse the row being edited: the "Both" row, else the first per-group row (an event being
+    // converted from Separated LG). Any other per-group row on this date would be left behind
+    // as an orphan, so the server deletes those in the same call.
+    const existing = editingEntries.find(e => e.group === 'Both') ||
+                     editingEntries.find(e => e.group === 'JAG1') || editingEntries[0] || null;
+    if (existing) {
+      removeRefs = allEntries
+        .filter(e => e.date === existing.date && e.rowIndex && e.rowIndex !== existing.rowIndex && e.group !== 'Both')
+        .map(_entryRef);
+    }
+
+    let fields;
+    if (isCR) {
+      fields = { notes: val('shared-notes') };
+    } else if (eventType === 'Special') {
+      // Venue + user-defined "Label: Value" lines stored in notes
+      const lines = Array.from(document.querySelectorAll('.special-field-row')).map(r => {
+        const label = r.querySelector('.sf-label').value.trim();
+        const value = r.querySelector('.sf-value').value.trim();
+        return (label && value) ? label + ': ' + value : null;
+      }).filter(Boolean);
+      const commentText = val('special-comment').trim();
+      if (commentText) lines.push('Comments: ' + commentText);
+      fields = { venue: val('shared-venue'), notes: lines.join('\n') };
+    } else {
+      // Youth Hour / Combined: all shared fields
+      fields = {
+        venue:       val('shared-venue'),
+        organiser:   resolveDisplayName(val('shared-organiser')),
+        pw:          resolveDisplayName(val('shared-pw')),
+        facilitator: resolveDisplayName(val('shared-facilitator')),
+        food:        val('shared-food'),
+        reporting:   resolveDisplayName(val('shared-reporting')),
+        notes:       val('shared-notes'),
+        iceBreaker:  resolveDisplayName(val('shared-iceBreaker')),
+        attendees:   attendeesFor(date)
+      };
+      buildShare = function() { return _buildCombinedShareText(friday, toSave); };
+    }
+    toSave = [row(existing, 'Both', fields)];
+
+  } else {
+    // Separated LG: one row per group. When a "Both" event is being converted, its row is
+    // reused for the first group so nothing is left behind.
+    const spare = editingEntries.find(e => e.group === 'Both') || null;
+    toSave = groups.map((grp, i) => row(
+      editingEntries.find(e => e.group === grp) || (i === 0 ? spare : null), grp, {
+        venue:       val(grp + '-venue'),
+        organiser:   resolveDisplayName(val(grp + '-organiser')),
+        pw:          resolveDisplayName(val(grp + '-pw')),
+        facilitator: resolveDisplayName(val(grp + '-facilitator')),
+        food:        val(grp + '-food'),
+        reporting:   resolveDisplayName(val(grp + '-reporting')),
+        notes:       val(grp + '-notes'),
+        attendees:   attendeesFor(date + ':' + grp)
+      }));
+    buildShare = function() { return _buildGroupShareText(friday, toSave[0]); };
+  }
+
+  // Save & Copy: copy NOW, while still inside the tap. iOS Safari refuses clipboard writes made
+  // later from the server callback. A failure to build the text must never block the save.
+  let copied = false;
+  if (buildShare) {
+    try { _copyTextSilent(buildShare()); copied = true; } catch (e) { console.error('share text failed:', e); }
+  }
+
+  _setFormSaving(true);
   google.script.run
     .withSuccessHandler(function(result) {
-      if (!result.success) { showToast('Error: ' + result.error); return; }
-      _mergeEntriesIntoCache(toSave);
-      const _friday = new Date(date + 'T00:00:00');
-      _copyTextSilent(_buildGroupShareText(_friday, toSave[0]));
-      finishSave('Saved & copied!', result.stable);
+      if (!result || !result.success) { _setFormSaving(false); _showServerError(result); return; }
+      if (result.entries) {
+        _applyServerEntries(result); // rows moved: the server sent the fresh entries with the save
+      } else {
+        // `orig` is only for the server — keep it out of the cached entries
+        _mergeEntriesIntoCache(toSave.map(e => Object.assign({}, e, { orig: undefined })), removeRefs);
+      }
+      finishSave(copied ? 'Saved & copied!' : 'Saved!', result.stable || !!result.entries);
     })
     .withFailureHandler(function(err) { _setFormSaving(false); showToast('Error: ' + err.message); })
-    .saveRosterEntries(toSave);
+    .saveRosterEntries(toSave, removeRefs);
 }
 
 function val(id) {
@@ -1328,7 +1379,7 @@ function _openConfirmModal(icon, title, subtitle, confirmLabel, confirmOnclick) 
 }
 function openEditEntries(entries) {
   editingEntries = entries;
-  activeGroups   = entries.map(e => e.group);
+  activeGroups   = ['JAG1','JAG2'];
   renderAdd();
 }
 
@@ -1338,24 +1389,29 @@ function openAddForDate(dateStr) {
   renderAdd(dateStr);
 }
 
-function confirmDeleteEntries(rowIndices, date, label) {
-  _openConfirmModal('&#128465;', 'Delete ' + _esc(label) + ' on ' + _esc(date) + '?',
-    'This cannot be undone.', 'Yes, Delete', 'doDeleteEntries(' + JSON.stringify(rowIndices) + ')');
+function confirmDeleteEntries(refs, label) {
+  _openConfirmModal('&#128465;', 'Delete ' + _esc(label) + ' on ' + _esc(refs[0].date) + '?',
+    'This cannot be undone.', 'Yes, Delete', 'doDeleteEntries(' + encodeEntries(refs) + ')');
 }
 
-function doDeleteEntries(rowIndices) {
+// One server call for all rows: separate calls run concurrently and could delete a shifted row.
+function doDeleteEntries(refs) {
   closeModal();
-  const sorted = [...rowIndices].sort((a,b) => b - a);
-  let done = 0;
-  sorted.forEach(rowIndex => {
-    google.script.run
-      .withSuccessHandler(function(result) {
-        if (!result.success) { showToast('Error: ' + result.error); return; }
-        if (++done === sorted.length) finishSave('Deleted');
-      })
-      .withFailureHandler(err => showToast('Error: ' + err.message))
-      .deleteRosterEntry(rowIndex);
-  });
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result || !result.success) { _showServerError(result); return; }
+      if (result.entries) {
+        _applyServerEntries(result); // the server sent the fresh entries with the delete
+      } else {
+        const gone = new Set(refs.map(function(r) { return r.rowIndex; }));
+        allEntries = allEntries.filter(function(e) { return !gone.has(e.rowIndex); });
+        _scheduleDatesCache = null;
+        _entriesByDateCache = null;
+      }
+      finishSave('Deleted', !!result.entries);
+    })
+    .withFailureHandler(err => showToast('Error: ' + err.message))
+    .deleteRosterEntries(refs);
 }
 
 // =============================================
@@ -1559,10 +1615,17 @@ function submitMember() {
   _setModalSaving(true, 'Save Member');
   google.script.run
     .withSuccessHandler(function(result) {
-      if (!result.success) { _setModalSaving(false, 'Save Member'); showToast('Error: ' + result.error); return; }
+      if (!result || !result.success) { _setModalSaving(false, 'Save Member'); _showServerError(result); return; }
       showToast('Member saved');
       closeModal();
-      if (member.rowIndex) {
+      const movedRow = !isNew && result.rowIndex !== member.rowIndex;
+      if (movedRow) {
+        // The row was found somewhere else, so every cached rowIndex is suspect — reload.
+        loadData(true);
+        return;
+      }
+      member.rowIndex = result.rowIndex;
+      if (!isNew) {
         const idx = allMembers.findIndex(function(m) { return m.rowIndex === member.rowIndex; });
         if (idx >= 0) allMembers[idx] = Object.assign({}, allMembers[idx], member);
         else allMembers.push(member);
@@ -1572,33 +1635,39 @@ function submitMember() {
       _dupFirstNamesCache = null;
       _activeCache = null;
       currentView = 'members';
-      _renderMembersList(_memberQ);
-      if (isNew) loadData(); // only new members need server rowIndex sync
+      _renderMembersList(_memberQ); // no reload needed: the server returned the new row's rowIndex
     })
     .withFailureHandler(function(err) { _setModalSaving(false, 'Save Member'); showToast('Error: ' + err.message); })
-    .saveMember(member);
+    .saveMember(Object.assign({ origName: editingMember ? editingMember.name : '' }, member));
 }
 
 function confirmDeleteMember(rowIndex, name) {
   _openConfirmModal('&#128100;', 'Remove ' + _esc(name) + '?',
-    "They won't appear in future dropdowns.", 'Yes, Remove', 'deleteMemberRow(' + rowIndex + ')');
+    "They won't appear in future dropdowns.", 'Yes, Remove', 'deleteMemberRow(' + rowIndex + ',' + encodeEntries(name) + ')');
 }
 
-function deleteMemberRow(rowIndex) {
+// Removes the item at rowIndex from a Members/Lyrics list and moves every later item up one
+// row, exactly as deleting the sheet row did — so no reload is needed to keep rowIndices right.
+function _withoutRow(list, rowIndex) {
+  return list.filter(function(x) { return x.rowIndex !== rowIndex; })
+             .map(function(x) { return x.rowIndex > rowIndex ? Object.assign({}, x, { rowIndex: x.rowIndex - 1 }) : x; });
+}
+
+function deleteMemberRow(rowIndex, name) {
   closeModal();
   google.script.run
     .withSuccessHandler(function(result) {
-      if (!result.success) { showToast('Error: ' + result.error); return; }
+      if (!result || !result.success) { _showServerError(result); return; }
       showToast('Member removed');
-      allMembers = allMembers.filter(function(m) { return m.rowIndex !== rowIndex; });
+      if (result.rowIndex !== rowIndex) { loadData(true); return; } // it was not where we thought — reload
+      allMembers = _withoutRow(allMembers, rowIndex);
       _dupFirstNamesCache = null;
       _activeCache = null;
       currentView = 'members';
       _renderMembersList((document.getElementById('members-search') || {}).value || '');
-      loadData(); // refresh in background to sync rowIndices
     })
     .withFailureHandler(err => showToast('Error: ' + err.message))
-    .deleteMember(rowIndex);
+    .deleteMember(rowIndex, name);
 }
 
 // =============================================
@@ -1793,8 +1862,7 @@ function getNextFriday() {
   return d;
 }
 
-// Returns every Friday from Jan 1 of the current year through Dec 31 of next year.
-// Covers current year + 3 ahead so the app stays useful well beyond any single year.
+// Returns the upcoming Fridays from today through today + 4 weeks (placeholder slots).
 function getFridaysRange() {
   const now    = today();
   const cutoff = new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000); // today + 4 weeks
@@ -1819,8 +1887,7 @@ function getScheduleDates() {
   const allDates   = [...allFridays];
   allEntries.forEach(e => {
     if (!fridaySet.has(e.date)) {
-      const p = e.date.split('-');
-      allDates.push(new Date(+p[0], +p[1]-1, +p[2]));
+      allDates.push(parseISODate(e.date));
       fridaySet.add(e.date);
     }
   });
@@ -1861,6 +1928,13 @@ function detectHost(venue, members) {
   return null;
 }
 
+// 'YYYY-MM-DD' → Date at LOCAL midnight. Never use new Date('YYYY-MM-DD') for a calendar
+// date: that parses as UTC midnight, which is the previous day in timezones behind UTC.
+function parseISODate(iso) {
+  const p = String(iso).split('-');
+  return new Date(+p[0], +p[1] - 1, +p[2]);
+}
+
 function toISODate(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -1868,8 +1942,10 @@ function toISODate(d) {
   return `${y}-${m}-${day}`;
 }
 
+// d is a calendar date at local midnight (see parseISODate), so it is formatted in the device's
+// own timezone. Forcing Australia/Perth here shows the previous day on devices east of Perth.
 function formatDateLong(d) {
-  return d.toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'short', year:'numeric', timeZone: 'Australia/Perth' });
+  return d.toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
 }
 
 // "Friday, 27 March 2026" — used in share messages
@@ -1966,7 +2042,7 @@ function buildAttendeePanel(date, eventType) {
     groups.push({ label: 'Adults',              members: adults,       cacheKey: date,          grpAttr: null });
   } else {
     // Separated LG — one group section per group being edited/created
-    const grpsToShow  = editingEntries.length > 0 ? editingEntries.map(function(e){ return e.group; }) : activeGroups;
+    const grpsToShow  = _formGroups();
     const roleOrder   = { 'Adult': 0, 'Student': 1, 'Harvest': 2 };
     grpsToShow.forEach(function(grp) {
       const members = allMembers
@@ -2505,9 +2581,14 @@ function submitLyric() {
   _setModalSaving(true);
   google.script.run
     .withSuccessHandler(function(result) {
-      if (!result.success) { _setModalSaving(false); showToast('Error: ' + result.error); return; }
+      if (!result || !result.success) { _setModalSaving(false); _showServerError(result); return; }
       showToast('Saved!');
       closeModal();
+      if (lyric.rowIndex && result.rowIndex !== lyric.rowIndex) {
+        // The row was found somewhere else, so every cached rowIndex is suspect — reload.
+        loadData(true);
+        return;
+      }
       lyric.rowIndex = result.rowIndex;
       const idx = allLyrics.findIndex(function(l) { return l.rowIndex === lyric.rowIndex; });
       if (idx >= 0) allLyrics[idx] = Object.assign({}, allLyrics[idx], lyric);
@@ -2515,26 +2596,27 @@ function submitLyric() {
       _renderLyricsList(_lyricQ);
     })
     .withFailureHandler(function(err) { _setModalSaving(false); showToast('Error: ' + err.message); })
-    .saveLyric(lyric);
+    .saveLyric(Object.assign({ origName: editingLyric ? editingLyric.songName : '' }, lyric));
 }
 
 function confirmDeleteLyric(rowIndex, name) {
   _openConfirmModal('&#127925;', 'Remove “' + _esc(name) + '”?',
-    'This cannot be undone.', 'Yes, Remove', 'deleteLyricRow(' + rowIndex + ')');
+    'This cannot be undone.', 'Yes, Remove', 'deleteLyricRow(' + rowIndex + ',' + encodeEntries(name) + ')');
 }
 
-function deleteLyricRow(rowIndex) {
+function deleteLyricRow(rowIndex, name) {
   const q = (document.getElementById('lyrics-search') || {}).value || '';
   closeModal();
   google.script.run
     .withSuccessHandler(function(result) {
-      if (!result.success) { showToast('Error: ' + result.error); return; }
+      if (!result || !result.success) { _showServerError(result); return; }
       showToast('Song removed');
-      allLyrics = allLyrics.filter(function(l) { return l.rowIndex !== rowIndex; });
+      if (result.rowIndex !== rowIndex) { loadData(true); return; } // it was not where we thought — reload
+      allLyrics = _withoutRow(allLyrics, rowIndex);
       _renderLyricsList(q);
     })
     .withFailureHandler(function(err) { showToast('Error: ' + err.message); })
-    .deleteLyric(rowIndex);
+    .deleteLyric(rowIndex, name);
 }
 
 // =============================================
@@ -2716,11 +2798,13 @@ function closeModal(event) {
 // =============================================
 // Toast
 // =============================================
-function showToast(msg) {
+let _toastTimer = null;
+function showToast(msg, ms) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  clearTimeout(_toastTimer); // a newer toast must not be hidden by an older toast's timer
+  _toastTimer = setTimeout(() => t.classList.remove('show'), ms || 2500);
 }
 
 // =============================================
